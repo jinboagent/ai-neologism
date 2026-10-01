@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { acceptedWordsCount, issueKey, KEY_COOKIE, resolveKeyHash, REVIEW_THRESHOLD } from "@/lib/keys";
 import { rateLimit } from "@/lib/ratelimit";
 import { badgeFromVerdict, verifyNovelty } from "@/lib/verify";
-import { hydrate, LIMITS, listPublished, uniqueSlug, type Reference, type Verification } from "@/lib/words";
+import { hydrate, LIMITS, listPublished, toPublic, uniqueSlug, type Reference, type Verification } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +27,11 @@ export async function GET(req: Request) {
     const rows = getDb()
       .prepare("SELECT * FROM words WHERE contributor_key_hash = ? ORDER BY updated_at DESC")
       .all(keyHash) as never[];
-    return NextResponse.json({ words: rows.map(hydrate) });
+    return NextResponse.json({ words: rows.map(hydrate).map(toPublic) });
   }
 
   const words = listPublished({ limit, offset: (page - 1) * limit });
-  return NextResponse.json({ words, page, count: words.length });
+  return NextResponse.json({ words: words.map(toPublic), page, count: words.length });
 }
 
 type Submission = {

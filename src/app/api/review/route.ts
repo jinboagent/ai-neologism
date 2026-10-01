@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { canReview, resolveKeyHash } from "@/lib/keys";
-import { hydrate, type WordRow } from "@/lib/words";
+import { hydrate, toPublic, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +22,11 @@ export async function GET(req: Request) {
   const rows = getDb()
     .prepare("SELECT * FROM words WHERE status = 'in_review' ORDER BY created_at ASC")
     .all() as WordRow[];
-  // A reviewer cannot review their own submissions.
-  const queue = rows.map(hydrate).map((w) => ({ ...w, is_own: w.contributor_key_hash === reviewer }));
+  // A reviewer cannot review their own submissions; strip the internal key hash
+  // before anything leaves the server.
+  const queue = rows
+    .map(hydrate)
+    .map((w) => ({ ...toPublic(w), is_own: w.contributor_key_hash === reviewer }));
   return NextResponse.json({ queue });
 }
 
