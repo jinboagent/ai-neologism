@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { canReview, resolveKeyHash } from "@/lib/keys";
 import { rateLimit } from "@/lib/ratelimit";
-import { getWord, LIMITS, parseJsonColumn, type WordRow } from "@/lib/words";
+import { getWord, LIMITS, parseJsonColumn, toPublic, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const keyHash = await resolveKeyHash(req);
   const word = getWord(slug, keyHash);
   if (!word) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  return NextResponse.json({ word });
+  return NextResponse.json({ word: toPublic(word) });
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -113,5 +113,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
   );
 
   const updated = getWord(slug, keyHash);
-  return NextResponse.json({ word: updated });
+  return NextResponse.json({ word: updated ? toPublic(updated) : null });
 }

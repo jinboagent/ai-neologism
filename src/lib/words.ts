@@ -85,6 +85,18 @@ export function hydrate(row: WordRow): Word {
 }
 
 /**
+ * Word shape safe to send over the API. `contributor_key_hash` is only a SHA-256
+ * digest of a high-entropy key, but it is still an internal ownership identifier —
+ * nothing like it belongs in a response body.
+ */
+export type PublicWord = Omit<Word, "contributor_key_hash">;
+
+export function toPublic(w: Word): PublicWord {
+  const { contributor_key_hash: _internal, ...rest } = w;
+  return rest;
+}
+
+/**
  * Field bounds shared by every write path. POST and PUT used to disagree — POST
  * capped the definition at 600 characters while PUT accepted anything.
  */
