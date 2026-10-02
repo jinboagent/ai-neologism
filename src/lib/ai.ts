@@ -136,6 +136,19 @@ function assertSafeTarget(candidate: URL): void {
   if (isBlockedHost(candidate.hostname)) throw new Error("BAD_URL");
 }
 
+/** Validate a user-supplied link at ingestion time (e.g. when storing a seed),
+ * long before anything ever fetches it. Throws BAD_URL; returns the parsed URL. */
+export function validatePublicUrl(raw: string): URL {
+  let target: URL;
+  try {
+    target = new URL(raw.trim());
+  } catch {
+    throw new Error("BAD_URL");
+  }
+  assertSafeTarget(target);
+  return target;
+}
+
 /** Fetch a pasted web link and reduce it to readable text for the AI to work from. */
 export async function fetchUrlContent(url: string): Promise<string> {
   let target: URL;
