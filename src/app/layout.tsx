@@ -28,8 +28,10 @@ const NAV = [
   { href: "/index", label: "Index" },
   { href: "/popularity", label: "Popularity" },
   { href: "/contribute", label: "Contribute" },
+  { href: "/seeds", label: "Seeds" },
   { href: "/review", label: "Review" },
   { href: "/my-words", label: "My words" },
+  { href: "/sources", label: "Sources" },
   { href: "/about", label: "About" },
 ];
 

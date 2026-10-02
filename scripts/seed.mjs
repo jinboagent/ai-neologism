@@ -68,6 +68,16 @@ db.exec(`
     reason TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS seeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    slug TEXT,
+    contributor_key_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE VIRTUAL TABLE IF NOT EXISTS words_fts USING fts5(
     word, definition, explanation, why_this_word,
     content='words', content_rowid='id', tokenize='porter unicode61'

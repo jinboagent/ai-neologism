@@ -116,6 +116,7 @@ export default function AboutPage() {
                 ["POST /api/coin/verify", "{word, definition} → novelty verdict + evidence"],
                 ["GET /api/key", "your key status (accepted words, review rights)"],
                 ["GET /api/review · POST /api/review", "review queue & decisions (review rights required)"],
+                ["POST /api/cron/coin", "daily auto-coiner: coins up to AUTO_COIN_COUNT words from seeds + feeds into the review queue (CRON_SECRET-protected in production)"],
               ].map(([route, purpose]) => (
                 <tr key={route} className="border-t border-border/60">
                   <td className="py-1.5 pr-4 font-mono text-xs">{route}</td>
