@@ -56,7 +56,13 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const word = db.prepare("SELECT * FROM words WHERE slug = ? AND status = 'in_review'").get(slug) as WordRow | undefined;
+  // Same channel exclusion as the queue: API submissions are decided by the admin
+  // alone — knowing the slug must not let a community reviewer approve them.
+  const word = db
+    .prepare(
+      "SELECT * FROM words WHERE slug = ? AND status = 'in_review' AND (input_type IS NULL OR input_type != 'api')"
+    )
+    .get(slug) as WordRow | undefined;
   if (!word) return NextResponse.json({ error: "NOT_FOUND", message: "Word not found or not in review." }, { status: 404 });
   if (word.contributor_key_hash === reviewer) {
     return NextResponse.json({ error: "SELF_REVIEW", message: "You cannot review your own submission." }, { status: 403 });
