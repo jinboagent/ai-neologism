@@ -51,9 +51,12 @@ export async function POST(req: Request) {
   if (!slug || !action || !["approve", "reject"].includes(action)) {
     return NextResponse.json({ error: "INVALID_REQUEST", message: "slug and action ('approve' | 'reject') are required." }, { status: 400 });
   }
-  if (reason.length < 3) {
-    return NextResponse.json({ error: "REASON_REQUIRED", message: "A reason (≥3 chars) is required — it is part of the site's transparency." }, { status: 400 });
+  // A written reason is required only for rejection — it is what travels to the
+  // submitter. Approvals are one-click; the audit trail records a default note.
+  if (action === "reject" && reason.length < 3) {
+    return NextResponse.json({ error: "REASON_REQUIRED", message: "A reason (≥3 chars) is required for rejection — it goes to the submitter and the audit trail." }, { status: 400 });
   }
+  const auditReason = reason || "Approved by admin.";
 
   const db = getDb();
   const row = db.prepare("SELECT * FROM words WHERE slug = ? AND status = 'in_review' AND input_type = 'api'").get(slug) as
@@ -117,7 +120,7 @@ export async function POST(req: Request) {
     db.prepare("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, 'admin', ?, ?)").run(
       row.id,
       action === "approve" ? "approve" : "decline",
-      reason
+      auditReason
     );
     if (action === "approve") {
       db.prepare("UPDATE words SET status='published', published_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(row.id);

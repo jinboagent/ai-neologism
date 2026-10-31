@@ -138,8 +138,8 @@ export default function AdminPage() {
 
   async function decide(action: "approve" | "reject") {
     if (!selected) return;
-    if (reason.trim().length < 3) {
-      setError("A reason (≥3 chars) is required for every decision — it goes to the submitter and the audit trail.");
+    if (action === "reject" && reason.trim().length < 3) {
+      setError("A reason (≥3 chars) is required for rejection — it goes to the submitter.");
       return;
     }
     setBusy(true);
@@ -326,7 +326,7 @@ export default function AdminPage() {
 
               <div className="mt-4 rounded-lg border border-border bg-card p-3">
                 <label className="block">
-                  <span className="text-sm font-medium">Decision reason (required — emailed on rejection, always audited)</span>
+                  <span className="text-sm font-medium">Reason (required for rejection — emailed to the submitter; optional on approve)</span>
                   <textarea className={`${inputCls} mt-1`} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </label>
                 <button
