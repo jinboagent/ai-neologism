@@ -48,6 +48,7 @@ export type WordRow = {
   badge: string;
   input_type: string | null;
   contributor_key_hash: string | null;
+  contact_email: string | null;
   use_votes: number;
   work_votes: number;
   published_at: string | null;
@@ -86,13 +87,14 @@ export function hydrate(row: WordRow): Word {
 
 /**
  * Word shape safe to send over the API. `contributor_key_hash` is only a SHA-256
- * digest of a high-entropy key, but it is still an internal ownership identifier —
- * nothing like it belongs in a response body.
+ * digest of a high-entropy key, but it is still an internal ownership identifier;
+ * `contact_email` is personal data voluntarily provided for review notifications.
+ * Neither belongs in a response body.
  */
-export type PublicWord = Omit<Word, "contributor_key_hash">;
+export type PublicWord = Omit<Word, "contributor_key_hash" | "contact_email">;
 
 export function toPublic(w: Word): PublicWord {
-  const { contributor_key_hash: _internal, ...rest } = w;
+  const { contributor_key_hash: _internal, contact_email: _contact, ...rest } = w;
   return rest;
 }
 
@@ -116,7 +118,7 @@ export const LIMITS = {
 const PUBLIC_COLS = `id, slug, word, pronunciation, part_of_speech, definition, explanation,
   why_this_word, alternatives_json, verification_json, references_json, related_words,
   categories_json, ai_assisted, status, return_notes, badge, input_type, contributor_key_hash,
-  use_votes, work_votes, published_at, created_at, updated_at`;
+  contact_email, use_votes, work_votes, published_at, created_at, updated_at`;
 
 export function slugify(word: string): string {
   return word

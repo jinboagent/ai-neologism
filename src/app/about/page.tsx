@@ -105,7 +105,7 @@ export default function AboutPage() {
             <tbody>
               {[
                 ["GET /api/words", "list published words (page, limit)"],
-                ["POST /api/words", "submit a word package (X-Contribution-Key header; returns 202 in_review; a new key is issued if absent)"],
+                ["POST /api/words", "submit a word package (X-Contribution-Key header; returns 202 in_review; a new key is issued if absent). API submissions are reviewed by the admin alone — add an optional contact_email to be notified of the decision"],
                 ["GET /api/words/{slug}", "one full structured entry"],
                 ["PUT /api/words/{slug}", "edit (owner or reviewer); returned words re-enter the queue"],
                 ["GET /api/words/{slug}/revisions", "revision history"],

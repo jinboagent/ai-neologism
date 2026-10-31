@@ -19,8 +19,12 @@ export async function GET(req: Request) {
       { status: 403 }
     );
   }
+  // Community reviewers never see API submissions — those are gated by the admin
+  // alone (input_type 'api' is set server-side at submission).
   const rows = getDb()
-    .prepare("SELECT * FROM words WHERE status = 'in_review' ORDER BY created_at ASC")
+    .prepare(
+      "SELECT * FROM words WHERE status = 'in_review' AND (input_type IS NULL OR input_type != 'api') ORDER BY created_at ASC"
+    )
     .all() as WordRow[];
   // A reviewer cannot review their own submissions; strip the internal key hash
   // before anything leaves the server.

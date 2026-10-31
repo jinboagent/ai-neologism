@@ -75,6 +75,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/about" className="hover:text-primary">
               Methodology &amp; API
             </Link>
+            <Link href="/admin" className="hover:text-primary">
+              Admin
+            </Link>
           </div>
         </footer>
       </body>

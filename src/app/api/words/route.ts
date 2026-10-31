@@ -48,7 +48,10 @@ type Submission = {
   ai_assisted?: boolean;
   input_type?: string;
   verification?: Verification;
+  contact_email?: string;
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
   let body: Submission;
@@ -72,6 +75,20 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+
+  const contactEmail = (body.contact_email ?? "").trim();
+  if (contactEmail && (contactEmail.length > 200 || !EMAIL_RE.test(contactEmail))) {
+    return NextResponse.json(
+      { error: "INVALID_EMAIL", message: "contact_email must be a valid email address (or omitted)." },
+      { status: 400 }
+    );
+  }
+
+  // Channel detection: non-browser clients authenticate via the header, so their
+  // submissions are flagged 'api' server-side (client-supplied input_type is not
+  // trusted). API words go to the admin-only review queue.
+  const viaApi = !!req.headers.get("x-contribution-key");
+  const inputType = viaApi ? "api" : body.input_type ?? "form";
 
   // Resolve or issue a contribution key (browser cookie or X-Contribution-Key header).
   let keyHash = await resolveKeyHash(req);
@@ -128,8 +145,8 @@ export async function POST(req: Request) {
       .prepare(
         `INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
           alternatives_json, verification_json, references_json, related_words, categories_json,
-          ai_assisted, status, badge, input_type, contributor_key_hash)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_review', ?, ?, ?)`
+          ai_assisted, status, badge, input_type, contributor_key_hash, contact_email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_review', ?, ?, ?, ?)`
       )
       .run(
         newSlug,
@@ -146,8 +163,9 @@ export async function POST(req: Request) {
         JSON.stringify((body.categories ?? []).slice(0, LIMITS.categories)),
         body.ai_assisted ? 1 : 0,
         badgeFromVerdict(verification.verdict),
-        body.input_type ?? "form",
-        keyHash
+        inputType,
+        keyHash,
+        contactEmail || null
       );
 
     db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, 'Initial submission', ?)").run(

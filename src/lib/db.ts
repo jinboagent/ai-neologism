@@ -114,6 +114,12 @@ function createDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_votes_created ON votes(created_at);
     CREATE INDEX IF NOT EXISTS idx_seeds_key ON seeds(contributor_key_hash);
   `);
+
+  // Lightweight column migrations for databases created before a column existed.
+  const wordCols = db.pragma("table_info(words)") as { name: string }[];
+  if (!wordCols.some((c) => c.name === "contact_email")) {
+    db.exec("ALTER TABLE words ADD COLUMN contact_email TEXT");
+  }
   return db;
 }
 

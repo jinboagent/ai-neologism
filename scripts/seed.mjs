@@ -34,6 +34,7 @@ db.exec(`
     badge TEXT NOT NULL DEFAULT 'unverified',
     input_type TEXT,
     contributor_key_hash TEXT,
+    contact_email TEXT,
     use_votes INTEGER NOT NULL DEFAULT 0,
     work_votes INTEGER NOT NULL DEFAULT 0,
     published_at TEXT,
