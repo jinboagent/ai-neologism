@@ -162,8 +162,11 @@ function AiPath() {
     setForm({
       ...EMPTY_FORM,
       word: c.word,
+      pronunciation: c.pronunciation,
       definition: c.suggested_definition,
       why_this_word: `${c.rationale}\n\nEtymology: ${c.etymology}`,
+      related: c.related_concepts.join(", "),
+      categories: c.categories,
       ai_assisted: true,
     });
     setVerification(null);

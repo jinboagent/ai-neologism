@@ -104,7 +104,7 @@ describe("generateCandidates · response parsing", () => {
     const { generateCandidates } = await loadAi({ AI_API_KEY: "sk-test" });
 
     const [c] = await generateCandidates("material");
-    expect(c).toEqual({ word: "solo", etymology: "", rationale: "", suggested_definition: "" });
+    expect(c).toEqual({ word: "solo", pronunciation: "", etymology: "", rationale: "", suggested_definition: "", related_concepts: [], categories: [] });
   });
 
   it("drops entries that have no usable word", async () => {

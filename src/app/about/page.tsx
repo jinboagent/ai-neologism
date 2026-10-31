@@ -52,6 +52,7 @@ export default function AboutPage() {
             <li>Never a brand or trademark name.</li>
             <li>Etymology rationale always stated.</li>
             <li>Must name a real, identifiable phenomenon.</li>
+            <li>AI-coined words always propose an IPA pronunciation, and place themselves among related entries where meaningful relations exist.</li>
           </ul>
         </section>
 

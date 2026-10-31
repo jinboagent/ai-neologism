@@ -26,6 +26,7 @@ type AdminWord = {
 };
 
 const inputCls = "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
+const PAGE_SIZE = 12;
 
 export default function AdminPage() {
   const [session, setSession] = useState<"checking" | "out" | "in">("checking");
@@ -35,6 +36,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
 
   const [queue, setQueue] = useState<AdminWord[]>([]);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminWord | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [reason, setReason] = useState("");
@@ -50,6 +52,7 @@ export default function AdminPage() {
     }
     const data = await res.json();
     setQueue(data.queue ?? []);
+    setPage(1);
   }, []);
 
   useEffect(() => {
@@ -248,29 +251,54 @@ export default function AdminPage() {
               No API submissions waiting.
             </p>
           ) : (
-            <ul className="mt-3 space-y-3">
-              {queue.map((w) => (
-                <li key={w.slug}>
+            <>
+              <ul className="mt-3 space-y-3">
+                {queue.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((w) => (
+                  <li key={w.slug}>
+                    <button
+                      type="button"
+                      onClick={() => select(w)}
+                      className={`w-full rounded-xl border p-4 text-left transition-colors cursor-pointer ${
+                        selected?.slug === w.slug ? "border-primary bg-primary-soft" : "border-border bg-card hover:border-primary"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="word-title font-bold text-primary">{w.word}</span>
+                        <Badge kind={w.badge} />
+                        <StatusPill status="in_review" />
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{w.definition}</p>
+                      <p className="mt-1 text-xs text-muted-foreground/80">
+                        submitted {w.created_at.slice(0, 10)} · contact: {w.contact_email ?? "none provided"}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {queue.length > PAGE_SIZE && (
+                <nav aria-label="Queue pages" className="mt-4 flex items-center justify-between text-sm">
                   <button
                     type="button"
-                    onClick={() => select(w)}
-                    className={`w-full rounded-xl border p-4 text-left transition-colors cursor-pointer ${
-                      selected?.slug === w.slug ? "border-primary bg-primary-soft" : "border-border bg-card hover:border-primary"
-                    }`}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="rounded-lg border border-border px-4 py-2 hover:border-primary transition-colors cursor-pointer disabled:opacity-40"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="word-title font-bold text-primary">{w.word}</span>
-                      <Badge kind={w.badge} />
-                      <StatusPill status="in_review" />
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{w.definition}</p>
-                    <p className="mt-1 text-xs text-muted-foreground/80">
-                      submitted {w.created_at.slice(0, 10)} · contact: {w.contact_email ?? "none provided"}
-                    </p>
+                    ← Prev
                   </button>
-                </li>
-              ))}
-            </ul>
+                  <span className="text-muted-foreground">
+                    Page {page} of {Math.ceil(queue.length / PAGE_SIZE)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(Math.ceil(queue.length / PAGE_SIZE), p + 1))}
+                    disabled={page >= Math.ceil(queue.length / PAGE_SIZE)}
+                    className="rounded-lg border border-border px-4 py-2 hover:border-primary transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </nav>
+              )}
+            </>
           )}
         </section>
 

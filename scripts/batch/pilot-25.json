@@ -1,0 +1,401 @@
+[
+  {
+    "word": "carewash",
+    "part_of_speech": "noun",
+    "definition": "Using the language of care, wellbeing, or compassion to disguise practices that harm the very people named.",
+    "explanation": "Where greenwashing launders environmental records, carewash launders caring ones: a firm announces mental-health days while stacking the workload that made them necessary. The caring vocabulary is real; the change it advertises is not.",
+    "why_this_word": "care + -washing, extending the productive '-washing' family (greenwashing, sportswashing) to compassion claims. Observed across workplace branding, health marketing, and edtech.",
+    "pronunciation": "/ˈkɛərˌwɒʃ/",
+    "related_words": [
+      "careloophole"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "scrollgrief",
+    "part_of_speech": "noun",
+    "definition": "The recurrent, low-grade grief re-triggered when an algorithm resurfaces memories of a lost person or a past self.",
+    "explanation": "Feeds do not know when to stop mourning. A photo from three years ago surfaces on schedule, and the griever is pulled back in — not by choice but by the platform's memory loop. The word names grief with a scroll bar attached.",
+    "why_this_word": "scroll + grief. The phenomenon is the feed-era descendant of ordinary remembrance: memory resurfaced by recommendation rather than occasion.",
+    "pronunciation": "/ˈskroʊlˌɡriːf/",
+    "related_words": [
+      "symptomscrolling"
+    ],
+    "categories": [
+      [
+        "Technology & AI"
+      ]
+    ]
+  },
+  {
+    "word": "quietcut",
+    "part_of_speech": "noun",
+    "definition": "A small, unannounced reduction in a product or service's quality, imposed gradually to avoid backlash.",
+    "explanation": "The portion shrinks, the support chat closes at six, the once-free feature moves behind a plan. Each step is too small to protest; the sum is a different product. Quietcut is shrinkflation's sibling for services.",
+    "why_this_word": "quiet + cut — the cut is real, its announcement is not. Follows the 'quiet' pattern of unannounced institutional change.",
+    "pronunciation": "/ˈkwaɪətˌkʌt/",
+    "related_words": [
+      "titleflation"
+    ],
+    "categories": [
+      [
+        "Work & Economy"
+      ]
+    ]
+  },
+  {
+    "word": "friendflation",
+    "part_of_speech": "noun",
+    "definition": "The gradual shrinking of an adult's circle of close friendships as work, distance, and logistics crowd out their maintenance.",
+    "explanation": "Not a falling-out — nobody fought. The pool of 'people I could call' simply erodes year over year, while acquaintance counts stay high. Friendflation names the quiet depreciation, and the effort that must be invested simply to hold value steady.",
+    "why_this_word": "friend + inflation: the purchasing power of a shrinking social circle, following the '-flation' pattern (shrinkflation's emotional cousin).",
+    "pronunciation": "/ˌfrɛndˈfleɪʃən/",
+    "related_words": [
+      "friendship-desert"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "normentropy",
+    "part_of_speech": "noun",
+    "definition": "The drift toward open disagreement about basic rules of interaction once a community's shared context collapses.",
+    "explanation": "In a stable group, nobody argues about whether to reply, who speaks first, or what a joke means. When strangers are thrown together without context — a merged Slack, a global forum — every interaction starts a negotiation. Normentropy is that disorder, and the energy burned negotiating what used to be assumed.",
+    "why_this_word": "norm + entropy: borrowed from thermodynamics to name the disordering of shared expectations, in the lineage of context-collapse research.",
+    "pronunciation": "/ˌnɔːrmˈɛntrəpi/",
+    "related_words": [],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "dopamining",
+    "part_of_speech": "noun",
+    "definition": "The systematic extraction of dopamine responses from users as a resource, the way ore is mined.",
+    "explanation": "Notifications, variable rewards, autoplay — the machinery is not trying to inform or entertain but to harvest a reaction, at industrial scale and with the same indifference to the landscape. Dopamining names the user's role in that economy: the seam being worked.",
+    "why_this_word": "dopamine + mining. The extraction metaphor is deliberate: the resource is neurological, the operations are extractive, and the tailings are attention.",
+    "pronunciation": "/ˌdoʊpəˈmaɪnɪŋ/",
+    "related_words": [
+      "attention-rent",
+      "availability-creep"
+    ],
+    "categories": [
+      [
+        "Technology & AI"
+      ]
+    ]
+  },
+  {
+    "word": "voicepoverty",
+    "part_of_speech": "noun",
+    "definition": "The condition of being systematically unheard in the forums where decisions about one's own life are made.",
+    "explanation": "Food poverty names missing material basics; voicepoverty names a missing civic one — the tenant unheard at the planning meeting, the patient talked over at rounds, the worker surveyed but never consulted. It can coexist with loudness: speaking constantly into rooms that do not act.",
+    "why_this_word": "voice + poverty, on the 'food poverty' pattern: a civic deprivation framed like a material one, because it behaves like one.",
+    "pronunciation": "/ˈvɔɪsˌpɒvərti/",
+    "related_words": [],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "trustlag",
+    "part_of_speech": "noun",
+    "definition": "The delay between an institution's actual reform and the public's willingness to trust it again.",
+    "explanation": "Trust is destroyed quickly and rebuilt slowly, and the gap between the two is a real social cost: reformed services stay avoided, apologized-to groups stay distant. Trustlag names that interest period — the time the apology must sit in the account before it can be drawn on.",
+    "why_this_word": "trust + lag. The lag metaphor keeps both halves visible: the institution has moved, the relationship has not yet.",
+    "pronunciation": "/ˈtrʌstlæɡ/",
+    "related_words": [
+      "cynicism-dividend"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "attention rent",
+    "part_of_speech": "noun",
+    "definition": "The ongoing toll a platform extracts from a person merely for holding a place in that person's day.",
+    "explanation": "Not the value exchanged for content — the charge for presence itself: the badge that must be checked, the streak that must not break, the app opened to make the notification stop. Like all rent, it is collected whether or not anything useful was received.",
+    "why_this_word": "attention + rent, drawing on the rentier framing of platform economics: extraction that persists without production.",
+    "pronunciation": "/əˈtɛnʃən ˌrɛnt/",
+    "related_words": [
+      "dopamining",
+      "presence-pressure"
+    ],
+    "categories": [
+      [
+        "Technology & AI"
+      ]
+    ]
+  },
+  {
+    "word": "humanpremium",
+    "part_of_speech": "noun",
+    "definition": "The rising value ascribed to human-made work as machine-generated content floods its category.",
+    "explanation": "When synthesis is cheap, provenance becomes the scarce ingredient: the handmade object, the human-written note, the live performance all gain a surcharge of meaning. Humanpremium names that surcharge — and the temptation to counterfeit it.",
+    "why_this_word": "human + premium, on the pattern of organic-premium economics: scarcity created not by supply but by category flooding.",
+    "pronunciation": "/ˌhjuːmənˈpriːmiəm/",
+    "related_words": [
+      "synthstalgia"
+    ],
+    "categories": [
+      [
+        "Technology & AI",
+        "Culture & Language"
+      ]
+    ]
+  },
+  {
+    "word": "synthstalgia",
+    "part_of_speech": "noun",
+    "definition": "Nostalgia for a past that never existed, manufactured by synthetic media.",
+    "explanation": "Generated '1970s family photos' and idealized retro playlists produce the warm pull of memory without any underlying memory. Synthstalgia is homesickness for a home that was never built — and it complicates the usual rule that nostalgia at least refers to something real.",
+    "why_this_word": "synth(etic) + (nos)talgia, with the medial syllable clipped in the classic blend manner.",
+    "pronunciation": "/ˌsɪnθˈstældʒə/",
+    "related_words": [
+      "humanpremium"
+    ],
+    "categories": [
+      [
+        "Technology & AI",
+        "Culture & Language"
+      ]
+    ]
+  },
+  {
+    "word": "whisperlist",
+    "part_of_speech": "noun",
+    "definition": "A private roster of accounts one quietly mutes or demotes, maintained to manage a feed without confrontation.",
+    "explanation": "The unfollow is a statement; the whisperlist is a shrug. Old friends, awkward colleagues, relentless posters — demoted not to silence but to inaudibility. The word names a whole quiet infrastructure of avoided conversations.",
+    "why_this_word": "whisper + list: the list is real, its effects are not announced to anyone on it.",
+    "pronunciation": "/ˈwɪspərˌlɪst/",
+    "related_words": [],
+    "categories": [
+      [
+        "Technology & AI"
+      ]
+    ]
+  },
+  {
+    "word": "cynicism dividend",
+    "part_of_speech": "noun",
+    "definition": "The political or commercial gain reaped by actors who cultivate the belief that nothing works.",
+    "explanation": "A discouraged electorate stays home; a cynical consumer stops asking for better. Cynicism is usually treated as a cost of bad governance, but for some actors it pays — which is why it is manufactured. The dividend is what the discouragement is for.",
+    "why_this_word": "cynicism + dividend, from finance: the return earned on an investment in despair.",
+    "pronunciation": "/ˈsɪnɪsɪzəm ˈdɪvɪdɛnd/",
+    "related_words": [
+      "trustlag"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "diagnosis creep",
+    "part_of_speech": "noun",
+    "definition": "The gradual widening of a diagnostic category until it absorbs ordinary, overwhelming experiences.",
+    "explanation": "A category created for severe cases edges outward: first the acute, then the common, then the universal. Each widening has its reasons; the sum is that a label built to name the exception quietly names the norm. Diagnosis creep is the medicalization process observed one boundary at a time.",
+    "why_this_word": "diagnosis + creep, following 'mission creep': expansion that is individually reasonable and collectively unexamined.",
+    "pronunciation": "/ˌdaɪəɡˈnoʊsɪs ˌkriːp/",
+    "related_words": [],
+    "categories": [
+      [
+        "Health"
+      ]
+    ]
+  },
+  {
+    "word": "friendship desert",
+    "part_of_speech": "noun",
+    "definition": "A life context — a town, a workplace, a stage of life — structurally lacking the conditions for friendship to form.",
+    "explanation": "Like a food desert, the problem is not demand but supply: no third places, no repeated unplanned contact, no time. People in friendship deserts are not bad at friendship; they are standing where friendships cannot grow. The word moves loneliness from personal failing to geography.",
+    "why_this_word": "friendship + desert, on the 'food desert' pattern: scarcity produced by the landscape rather than the person.",
+    "pronunciation": "/ˈfrɛndʃɪp ˌdɛzərt/",
+    "related_words": [
+      "friendflation"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "careloophole",
+    "part_of_speech": "noun",
+    "definition": "A structural gap through which an institution converts its care obligations into individual burdens.",
+    "explanation": "The policy says support is available; the form, the hours, and the fine print make it practically unreachable, and the shortfall lands on families. Nobody broke a rule — the gap is the rule. Careloophole names the drafting, not the accident.",
+    "why_this_word": "care + loophole: a deliberate reading of 'loophole' as designed escape, applied to care duties.",
+    "pronunciation": "/ˈkɛərˌluːphoʊl/",
+    "related_words": [
+      "carewash"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy"
+      ]
+    ]
+  },
+  {
+    "word": "symptomscrolling",
+    "part_of_speech": "noun",
+    "definition": "Compulsive searching of one's own symptoms online, intensified by feeds that learn the fear and feed it back.",
+    "explanation": "Older words named the searching; symptomscrolling names the loop, where the anxiety itself becomes a profile and the reassurance-seeking keeps resupplying the worry. The scroll is the symptom.",
+    "why_this_word": "symptom + scrolling: cyberchondria rebuilt for the recommendation era, where the search engine follows you home.",
+    "pronunciation": "/ˈsɪmptəmˌskroʊlɪŋ/",
+    "related_words": [
+      "scrollgrief"
+    ],
+    "categories": [
+      [
+        "Health",
+        "Technology & AI"
+      ]
+    ]
+  },
+  {
+    "word": "climatesplaining",
+    "part_of_speech": "noun",
+    "definition": "Unsolicited, condescending explanation of climate facts to someone already living their consequences.",
+    "explanation": "The farmer mid-drought does not need the greenhouse effect described; the flooded commuter does not need a lecture on sea walls. Climatesplaining is the information hierarchy failing upward — expertise quoted at experience.",
+    "why_this_word": "climate + -splaining, extending the productive '-splaining' suffix (mansplaining) to the climate context.",
+    "pronunciation": "/ˌklaɪmətˈsplɛɪnɪŋ/",
+    "related_words": [
+      "heatexile"
+    ],
+    "categories": [
+      [
+        "Environment"
+      ]
+    ]
+  },
+  {
+    "word": "heatexile",
+    "part_of_speech": "noun",
+    "definition": "A person displaced, temporarily or permanently, by heat their home can no longer be cooled against.",
+    "explanation": "Not a climate refugee crossing borders — often the heat exile just moves upstairs to a cousin's, sleeps in the car with the air running, or abandons a top-floor flat for three months a year. The displacement is small, recurring, and unnamed until now.",
+    "why_this_word": "heat + exile: exile at room scale, repeated annually, invisible in migration statistics.",
+    "pronunciation": "/ˈhiːtˌɛɡzaɪl/",
+    "related_words": [
+      "climatesplaining"
+    ],
+    "categories": [
+      [
+        "Environment"
+      ]
+    ]
+  },
+  {
+    "word": "titleflation",
+    "part_of_speech": "noun",
+    "definition": "The inflation of job titles to substitute for pay, progression, or security.",
+    "explanation": "The raise that never came arrives as a rebrand: lead, senior, principal, head of. Titleflation gives the employee a word to put on a profile and the employer a way to not give them anything else.",
+    "why_this_word": "title + inflation, on the shrinkflation/wordflation pattern: nominal growth, real stagnation.",
+    "pronunciation": "/ˌtaɪtəlˈfleɪʃən/",
+    "related_words": [
+      "quietcut"
+    ],
+    "categories": [
+      [
+        "Work & Economy"
+      ]
+    ]
+  },
+  {
+    "word": "slanglarceny",
+    "part_of_speech": "noun",
+    "definition": "The corporate appropriation of youth slang for marketing, accelerating the slang's death on contact.",
+    "explanation": "A term lives in a community, gets spotted by a brand team, and is dead within a quarter — spoken in a Super Bowl ad, forever uncool. Slanglarceny names the theft and the damage in one word: the phrase is stolen and broken in the same act.",
+    "why_this_word": "slang + larceny: petty theft with a demographic victim. The 'fellow kids' phenomenon, given a criminal record.",
+    "pronunciation": "/ˈslæŋˌlɑːrənsi/",
+    "related_words": [],
+    "categories": [
+      [
+        "Culture & Language"
+      ]
+    ]
+  },
+  {
+    "word": "consentslide",
+    "part_of_speech": "noun",
+    "definition": "The slow widening of how collected data is used, far beyond what a person originally agreed to.",
+    "explanation": "Nobody read a new terms page; there was nothing to read. The photo album becomes training data, the address book becomes a social graph, one purpose slides into six. Consentslide names expansion without permission-seeking — drift where a signature used to be required.",
+    "why_this_word": "consent + slide: the motion is gradual and downhill, and the consent given at the top no longer describes the bottom.",
+    "pronunciation": "/kənˈsɛntˌslaɪd/",
+    "related_words": [
+      "dopamining"
+    ],
+    "categories": [
+      [
+        "Technology & AI"
+      ]
+    ]
+  },
+  {
+    "word": "anxiety arbitrage",
+    "part_of_speech": "noun",
+    "definition": "Profit made by converting an anxiety gap between audiences into engagement, clicks, or sales.",
+    "explanation": "One audience's dread is another audience's market: the insurer, the prepper supplier, the outrage channel all earn by widening the spread. Anxiety arbitrage names the trade — fear moved from where it is cheap to where it is valuable.",
+    "why_this_word": "anxiety + arbitrage, from finance: profit extracted from an imbalance between two markets, here of fear.",
+    "pronunciation": "/æŋˈzaɪəti ˈɑːrbətrɑːʒ/",
+    "related_words": [
+      "dopamining"
+    ],
+    "categories": [
+      [
+        "Society & Philanthropy",
+        "Work & Economy"
+      ]
+    ]
+  },
+  {
+    "word": "presence pressure",
+    "part_of_speech": "noun",
+    "definition": "The unspoken obligation to remain reachable and visibly online, independent of any actual task.",
+    "explanation": "No message arrives, yet the green dot must stay green; the status must say available, the read receipts must be instant. Presence pressure is labor with no deliverable — the work of seeming present so that absence is never discovered.",
+    "why_this_word": "presence + pressure: not workload but witness-load, the demand to be seen being there.",
+    "pronunciation": "/ˈprɛzəns ˈprɛʃər/",
+    "related_words": [
+      "availability-creep",
+      "attention-rent"
+    ],
+    "categories": [
+      [
+        "Technology & AI",
+        "Work & Economy"
+      ]
+    ]
+  },
+  {
+    "word": "availability creep",
+    "part_of_speech": "noun",
+    "definition": "The gradual expansion of the hours in which a person is expected to respond.",
+    "explanation": "First the workday, then the evening 'quick question', then Sunday. Each expansion is a small favor that becomes the new floor. Availability creep is how 'always on' arrived without anyone ever asking for it.",
+    "why_this_word": "availability + creep, on the 'mission creep' pattern: each step reasonable, the trajectory unagreed.",
+    "pronunciation": "/əˌveɪləˈbɪləti ˌkriːp/",
+    "related_words": [
+      "presence-pressure"
+    ],
+    "categories": [
+      [
+        "Work & Economy",
+        "Technology & AI"
+      ]
+    ]
+  }
+]

@@ -1,11 +1,16 @@
 // Pluggable AI adapter — any OpenAI-compatible chat-completions endpoint works
 // (set AI_BASE_URL / AI_API_KEY / AI_MODEL in .env.local).
 
+import { CATEGORIES } from "./categories";
+
 export type Candidate = {
   word: string;
+  pronunciation: string;
   etymology: string;
   rationale: string;
   suggested_definition: string;
+  related_concepts: string[];
+  categories: string[];
 };
 
 const BASE_URL = process.env.AI_BASE_URL ?? "https://api.openai.com/v1";
@@ -27,7 +32,7 @@ Craft rules for every candidate word:
 - must name a real, identifiable phenomenon present in the supplied material
 
 Respond with ONLY a JSON array of 3-5 objects, each:
-{"word": "...", "etymology": "roots/morphemes and why", "rationale": "one line on why this coinage fits the phenomenon", "suggested_definition": "one-sentence dictionary-style definition"}
+{"word": "...", "pronunciation": "IPA transcription, e.g. /ˈɡreɪˌwɒʃɪŋ/ — REQUIRED, not optional", "etymology": "roots/morphemes and why", "rationale": "one line on why this coinage fits the phenomenon", "suggested_definition": "one-sentence dictionary-style definition", "related_concepts": ["one or two dictionary words or established terms this coinage sits near — omit the array if nothing meaningful comes to mind"], "categories": ["pick 1-2 from exactly this fixed list: ${CATEGORIES.join(" | ")}"]}
 No markdown fences, no commentary.`;
 
 export async function generateCandidates(material: string): Promise<Candidate[]> {
@@ -82,9 +87,16 @@ function parseCandidates(text: string): Candidate[] {
     .slice(0, 5)
     .map((c) => ({
       word: String(c.word).trim(),
+      pronunciation: typeof c.pronunciation === "string" ? c.pronunciation.trim() : "",
       etymology: String(c.etymology ?? "").trim(),
       rationale: String(c.rationale ?? "").trim(),
       suggested_definition: String(c.suggested_definition ?? "").trim(),
+      related_concepts: Array.isArray(c.related_concepts)
+        ? c.related_concepts.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 4)
+        : [],
+      categories: Array.isArray(c.categories)
+        ? c.categories.map((x: unknown) => String(x).trim()).filter((x: string) => (CATEGORIES as readonly string[]).includes(x)).slice(0, 2)
+        : [],
     }));
 }
 

@@ -4,7 +4,15 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { CATEGORIES } from "@/lib/categories";
 
-export type Candidate = { word: string; etymology: string; rationale: string; suggested_definition: string };
+export type Candidate = {
+  word: string;
+  pronunciation: string;
+  etymology: string;
+  rationale: string;
+  suggested_definition: string;
+  related_concepts: string[];
+  categories: string[];
+};
 export type RefRow = { type: string; title: string; url: string; author: string; outlet: string; date: string; excerpt: string };
 export type Verification = {
   verdict: "NEW" | "NEAR_EXISTING" | "EXISTS" | "UNVERIFIED";

@@ -8,9 +8,25 @@ import path from "node:path";
 import fs from "node:fs";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
+
+// Credentials and secrets come from .env.local (the operator's real config), so
+// rotating the admin password or the CRON_SECRET doesn't break the suite.
+function readEnvLocal() {
+  const file = path.join(process.cwd(), ".env.local");
+  const env = {};
+  if (!fs.existsSync(file)) return env;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m) env[m[1]] = m[2];
+  }
+  return env;
+}
+const envLocal = readEnvLocal();
+
 const REVIEWER_KEY = process.env.TEST_REVIEWER_KEY ?? "ck_seed_reviewer_7a0b807a8f3cb9f8";
-const ADMIN_USER = process.env.TEST_ADMIN_USER ?? "admin";
-const ADMIN_PASS = process.env.TEST_ADMIN_PASS ?? "change-me-local";
+const ADMIN_USER = process.env.TEST_ADMIN_USER ?? envLocal.ADMIN_USERNAME ?? "admin";
+const ADMIN_PASS = process.env.TEST_ADMIN_PASS ?? envLocal.ADMIN_PASSWORD ?? "change-me-local";
+const CRON_SECRET = process.env.CRON_SECRET ?? envLocal.CRON_SECRET ?? "";
 const TS = Date.now().toString(36);
 
 // ---------------------------------------------------------------------------
@@ -440,8 +456,12 @@ async function testSeeds() {
 
 async function testCron() {
   section("I. Daily auto-coiner");
-  const cron = await req("POST", "/api/cron/coin", { useJar: false, timeoutMs: 120_000 });
-  ok("cron endpoint responds", cron.status === 200 || cron.status === 503);
+  const cron = await req("POST", "/api/cron/coin", {
+    useJar: false,
+    timeoutMs: 120_000,
+    headers: CRON_SECRET ? { "x-cron-secret": CRON_SECRET } : {},
+  });
+  ok("cron endpoint responds", cron.status === 200 || cron.status === 503, `got ${cron.status}`);
   if (cron.status === 503) {
     ok("graceful AI_NOT_CONFIGURED while no AI key", cron.json?.error === "AI_NOT_CONFIGURED");
   } else {

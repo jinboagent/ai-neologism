@@ -5,7 +5,7 @@
 import { getDb } from "./db";
 import { aiConfigured, fetchUrlContent, generateCandidates } from "./ai";
 import { badgeFromVerdict, verifyNovelty } from "./verify";
-import { uniqueSlug, type Verification } from "./words";
+import { slugify, uniqueSlug, type Verification } from "./words";
 
 export type CoinOutcome =
   | { ok: true; slug: string; word: string; verdict: string; from: string }
@@ -150,19 +150,29 @@ export async function coinDaily(count: number): Promise<CoinReport> {
 
     const slug = uniqueSlug(chosen.word);
     db.prepare(
-      `INSERT INTO words (slug, word, definition, explanation, why_this_word,
-        alternatives_json, verification_json, references_json,
+      `INSERT INTO words (slug, word, pronunciation, definition, explanation, why_this_word,
+        alternatives_json, verification_json, references_json, related_words, categories_json,
         ai_assisted, status, badge, input_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'in_review', ?, 'auto')`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'in_review', ?, 'auto')`
     ).run(
       slug,
       chosen.word,
+      chosen.pronunciation || null,
       chosen.suggested_definition,
       "",
       `${chosen.rationale}\n\nEtymology: ${chosen.etymology}`,
       JSON.stringify(others),
       JSON.stringify(verification),
       JSON.stringify(reference ? [reference] : []),
+      // Related words are best-effort: keep only suggestions that name existing
+      // entries, so no word page ever links into a 404.
+      JSON.stringify(
+        chosen.related_concepts
+          .map((w) => slugify(w))
+          .filter((s) => s && db.prepare("SELECT 1 FROM words WHERE slug = ?").get(s))
+      ),
+      // Categories are pre-selected by the coiner (protocol §2 rule 9).
+      JSON.stringify(chosen.categories),
       badgeFromVerdict(verification.verdict)
     );
     db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, NULL, 'Auto-coined daily run', '{}')").run(
