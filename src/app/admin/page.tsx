@@ -92,6 +92,13 @@ export default function AdminPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Batch selection: slugs in the review queue, ids in the manage list. The
+  // shared batch reason is optional — empty rejection falls back to a default.
+  const [qSel, setQSel] = useState<Set<string>>(new Set());
+  const [mSel, setMSel] = useState<Set<number>>(new Set());
+  const [batchReason, setBatchReason] = useState("");
+  const [batchBusy, setBatchBusy] = useState(false);
+
   const loadQueue = useCallback(async () => {
     const res = await fetch("/api/admin/review");
     if (res.status === 401) {
@@ -150,6 +157,116 @@ export default function AdminPage() {
     setSession("out");
     setQueue([]);
     setSelected(null);
+    setQSel(new Set());
+    setMSel(new Set());
+  }
+
+  function toggleQ(slug: string) {
+    setQSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  }
+
+  function toggleAllQ() {
+    const pageSlugs = queue.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((w) => w.slug);
+    setQSel((prev) => {
+      const allSelected = pageSlugs.length > 0 && pageSlugs.every((s) => prev.has(s));
+      const next = new Set(prev);
+      if (allSelected) pageSlugs.forEach((s) => next.delete(s));
+      else pageSlugs.forEach((s) => next.add(s));
+      return next;
+    });
+  }
+
+  function toggleM(id: number) {
+    setMSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllM() {
+    setMSel((prev) => {
+      const all = published ?? [];
+      const allSelected = all.length > 0 && all.every((w) => prev.has(w.id));
+      return allSelected ? new Set() : new Set(all.map((w) => w.id));
+    });
+  }
+
+  async function batchDecide(action: "approve" | "reject") {
+    if (qSel.size === 0) return;
+    const shared = batchReason.trim();
+    if (action === "reject" && shared && shared.length < 3) {
+      setError("A shared reason (≥3 chars) is required for rejection — or clear it to use the default.");
+      return;
+    }
+    const verb = action === "approve" ? "publish" : "reject";
+    if (!window.confirm(`Batch-${verb} ${qSel.size} selected word(s)?`)) return;
+    setBatchBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/review/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slugs: [...qSel], action, reason: shared }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? "Batch decision failed");
+      const skipped = (data.results as { ok: boolean }[]).filter((r) => !r.ok).length;
+      const done = action === "approve" ? data.approved : data.rejected;
+      setNotice(
+        `Batch ${action}: ${done} ${done === 1 ? "word" : "words"} ${action === "approve" ? "published" : "declined"}` +
+          `${skipped ? `, ${skipped} skipped (already decided)` : ""}.`
+      );
+      setQSel(new Set());
+      setBatchReason("");
+      await loadQueue();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Batch decision failed");
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function batchManage(action: "delete" | "unpublish" | "republish") {
+    if (mSel.size === 0) return;
+    if (
+      action === "delete" &&
+      !window.confirm(
+        `Permanently delete ${mSel.size} word(s)? Their votes, history, and review records are removed, and links to them on other entries are cleaned. This cannot be undone.`
+      )
+    )
+      return;
+    // The manage list includes in-review words, so a batch delete can remove the
+    // submission currently open in the review panel — close it if so.
+    const doomedSlugs = new Set((published ?? []).filter((w) => mSel.has(w.id)).map((w) => w.slug));
+    setBatchBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/words/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...mSel], action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? "Batch action failed");
+      setNotice(
+        `Batch ${action}: ${data.succeeded} done` +
+          `${data.failed ? `, ${data.failed} skipped (wrong state or missing)` : ""}.`
+      );
+      setMSel(new Set());
+      if (selected && doomedSlugs.has(selected.slug)) setSelected(null);
+      await loadPublished();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Batch action failed");
+    } finally {
+      setBatchBusy(false);
+    }
   }
 
   function select(w: AdminWord) {
@@ -382,6 +499,49 @@ export default function AdminPage() {
       {tab === "published" ? (
         <section aria-label="Published words" className="mt-6">
           <h2 className="text-lg font-bold">All words in the system</h2>
+          {published !== null && published.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 text-sm">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  aria-label="Select all words"
+                  checked={published.length > 0 && published.every((w) => mSel.has(w.id))}
+                  onChange={toggleAllM}
+                  className="h-4 w-4 cursor-pointer"
+                />
+                <span className="text-muted-foreground">Select all</span>
+              </label>
+              {mSel.size > 0 && (
+                <>
+                  <span className="font-medium">{mSel.size} selected</span>
+                  <button
+                    type="button"
+                    disabled={batchBusy}
+                    onClick={() => batchManage("unpublish")}
+                    className="min-h-9 rounded-lg border border-border px-4 text-muted-foreground transition-colors hover:border-warn hover:text-warn cursor-pointer disabled:opacity-50"
+                  >
+                    Batch unpublish
+                  </button>
+                  <button
+                    type="button"
+                    disabled={batchBusy}
+                    onClick={() => batchManage("republish")}
+                    className="min-h-9 rounded-lg border border-good bg-good-soft px-4 font-medium text-good transition-opacity hover:opacity-90 cursor-pointer disabled:opacity-50"
+                  >
+                    Batch republish
+                  </button>
+                  <button
+                    type="button"
+                    disabled={batchBusy}
+                    onClick={() => batchManage("delete")}
+                    className="min-h-9 rounded-lg border border-bad bg-bad-soft px-4 font-medium text-bad transition-opacity hover:opacity-90 cursor-pointer disabled:opacity-50"
+                  >
+                    Batch delete
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {published === null ? (
             <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
           ) : published.length === 0 ? (
@@ -393,6 +553,13 @@ export default function AdminPage() {
               {published.map((w) => (
                 <li key={w.id} className="rounded-xl border border-border bg-card p-4">
                   <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${w.word} for batch action`}
+                      checked={mSel.has(w.id)}
+                      onChange={() => toggleM(w.id)}
+                      className="h-4 w-4 shrink-0 cursor-pointer"
+                    />
                     <Link href={`/words/${w.slug}`} className="word-title text-lg font-bold text-primary hover:underline">
                       {w.word}
                     </Link>
@@ -442,6 +609,75 @@ export default function AdminPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_3fr]">
         <section aria-label="API submission queue">
           <h2 className="text-lg font-bold">Queue ({queue.length})</h2>
+          {queue.length > 0 && (
+            <div className="mt-3 rounded-xl border border-border bg-card p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all on this page"
+                    checked={(() => {
+                      const pageSlugs = queue.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((w) => w.slug);
+                      return pageSlugs.length > 0 && pageSlugs.every((s) => qSel.has(s));
+                    })()}
+                    onChange={toggleAllQ}
+                    className="h-4 w-4 cursor-pointer"
+                  />
+                  <span className="text-muted-foreground">Select page</span>
+                </label>
+                {qSel.size > 0 && (
+                  <>
+                    <span className="font-medium">{qSel.size} selected</span>
+                    <button
+                      type="button"
+                      disabled={batchBusy}
+                      onClick={() => batchDecide("approve")}
+                      className="min-h-9 rounded-lg border border-good bg-good-soft px-4 font-medium text-good transition-opacity hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    >
+                      Batch approve &amp; publish
+                    </button>
+                    <button
+                      type="button"
+                      disabled={batchBusy}
+                      onClick={() => batchDecide("reject")}
+                      className="min-h-9 rounded-lg border border-bad bg-bad-soft px-4 font-medium text-bad transition-opacity hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    >
+                      Batch reject &amp; notify
+                    </button>
+                  </>
+                )}
+              </div>
+              {qSel.size > 0 && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <label className="block">
+                    <span className="text-sm font-medium">
+                      Shared reason for rejection — emailed to every selected submitter with a contact address. Leave
+                      empty to use the default; presets fill it in.
+                    </span>
+                    <textarea
+                      className={`${inputCls} mt-1`}
+                      rows={2}
+                      value={batchReason}
+                      onChange={(e) => setBatchReason(e.target.value)}
+                    />
+                  </label>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Common reasons:</span>
+                    {REJECT_PRESETS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setBatchReason(p.text)}
+                        className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-warn hover:text-warn cursor-pointer"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {queue.length === 0 ? (
             <p className="mt-3 rounded-xl border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
               No API submissions waiting.
@@ -450,7 +686,14 @@ export default function AdminPage() {
             <>
               <ul className="mt-3 space-y-3">
                 {queue.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((w) => (
-                  <li key={w.slug}>
+                  <li key={w.slug} className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${w.word} for batch action`}
+                      checked={qSel.has(w.slug)}
+                      onChange={() => toggleQ(w.slug)}
+                      className="mt-5 h-4 w-4 shrink-0 cursor-pointer"
+                    />
                     <button
                       type="button"
                       onClick={() => select(w)}

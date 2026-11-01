@@ -317,7 +317,7 @@ async function testCommunityReview({ webSlug, webKey }) {
 async function testApiChannelAndAdmin() {
   section("G. API channel & admin gate");
   const api1 = await req("POST", "/api/words", {
-    headers: { "X-Contribution-Key": "ck_zztest_apikey1" },
+    headers: { "X-Contribution-Key": `ck_zztest_apikey1_${TS}` },
     body: {
       word: `zztest${TS}api1`,
       definition: "A third-party API submission that only the admin may approve.",
@@ -330,7 +330,7 @@ async function testApiChannelAndAdmin() {
   ok("API submission response does not leak the channel to strangers", api1.json?.slug?.length > 0);
 
   const api2 = await req("POST", "/api/words", {
-    headers: { "X-Contribution-Key": "ck_zztest_apikey2" },
+    headers: { "X-Contribution-Key": `ck_zztest_apikey2_${TS}` },
     body: {
       word: `zztest${TS}api2`,
       definition: "A second API submission destined for the rejection path.",
@@ -403,7 +403,7 @@ async function testApiChannelAndAdmin() {
   const edited = await req("GET", `/api/words/zztest${TS}api1`, { useJar: false });
   ok("published API word carries the admin's edit", edited.json?.word?.definition?.includes("admin edited"));
 
-  const declinedOwner = await req("GET", `/api/words/zztest${TS}api2`, { headers: { "X-Contribution-Key": "ck_zztest_apikey2" }, useJar: false });
+  const declinedOwner = await req("GET", `/api/words/zztest${TS}api2`, { headers: { "X-Contribution-Key": `ck_zztest_apikey2_${TS}` }, useJar: false });
   ok("rejected word visible to its submitter with reason", declinedOwner.json?.word?.status === "declined" && !!declinedOwner.json?.word?.return_notes);
   assertNoPrivateFields("declined word (owner view)", declinedOwner.text);
 
@@ -492,7 +492,7 @@ async function testAdminWordManagement() {
   ok("admin login for management", login.status === 200);
 
   const sub = await req("POST", "/api/words", {
-    headers: { "X-Contribution-Key": "ck_zztest_manage" },
+    headers: { "X-Contribution-Key": `ck_zztest_manage_${TS}` },
     body: {
       word: `zztest${TS}manage`,
       definition: "A word created to prove the admin can unpublish, republish, and delete it.",
@@ -534,9 +534,102 @@ async function testAdminWordManagement() {
   ok("manage list without login → 401", unauth.status === 401);
 }
 
+async function testAdminBatch() {
+  section("K. Admin batch operations");
+  const login = await req("POST", "/api/admin/login", {
+    body: { username: ADMIN_USER, password: ADMIN_PASS },
+    headers: { "User-Agent": `zztest-suite-${TS}` },
+  });
+  ok("admin login for batch", login.status === 200);
+
+  // Three queue words through the API channel (A+B for batch approve, C for the
+  // partial batch, D for the batch reject — each decision needs its own word).
+  const slugs = [];
+  for (const tag of ["batchA", "batchB", "batchC", "batchD"]) {
+    const sub = await req("POST", "/api/words", {
+      headers: { "X-Contribution-Key": `ck_zztest_batch_${TS}` },
+      body: {
+        word: `zztest${TS}${tag}`,
+        definition: `A batch-operations probe (${tag}) proving the admin can decide many words at once.`,
+        verification: { verdict: "NEW", checked_at: "2026-11-01", method: "test package", queries: [], note: "test" },
+      },
+      useJar: false,
+    });
+    if (sub.status === 202) slugs.push(sub.json.slug);
+  }
+  ok("four batch test words submitted", slugs.length === 4, `got ${slugs.length}`);
+
+  const noSlugs = await req("POST", "/api/admin/review/batch", { body: { slugs: [], action: "approve" } });
+  ok("empty batch → 400", noSlugs.status === 400);
+  const badAction = await req("POST", "/api/admin/review/batch", { body: { slugs: [slugs[0]], action: "nuke" } });
+  ok("unknown batch action → 400", badAction.status === 400);
+  const shortReason = await req("POST", "/api/admin/review/batch", { body: { slugs: [slugs[0]], action: "reject", reason: "no" } });
+  ok("batch reject with too-short reason → 400", shortReason.status === 400);
+  const unauth = await req("POST", "/api/admin/review/batch", { body: { slugs, action: "approve" }, useJar: false });
+  ok("batch review without login → 401", unauth.status === 401);
+
+  const appr = await req("POST", "/api/admin/review/batch", { body: { slugs: [slugs[0], slugs[1]], action: "approve" } });
+  ok(
+    "batch approve publishes both",
+    appr.status === 200 && appr.json?.approved === 2,
+    `got ${appr.status} ${JSON.stringify(appr.json ?? {}).slice(0, 120)}`
+  );
+  const pub1 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false });
+  const pub2 = await req("GET", `/api/words/${slugs[1]}`, { useJar: false });
+  ok("approved words are publicly visible", pub1.status === 200 && pub2.status === 200);
+
+  const mixed = await req("POST", "/api/admin/review/batch", {
+    body: { slugs: [slugs[2], "zztest_never_submitted"], action: "approve" },
+  });
+  ok(
+    "batch skips unknown slugs, decides the rest",
+    mixed.status === 200 && mixed.json?.approved === 1 && (mixed.json?.results ?? []).some((r) => r.error === "NOT_FOUND")
+  );
+
+  const rej = await req("POST", "/api/admin/review/batch", { body: { slugs: [slugs[3]], action: "reject", reason: "" } });
+  ok("batch reject with empty reason uses the default", rej.status === 200 && rej.json?.rejected === 1);
+  const list = await req("GET", "/api/admin/words");
+  const c = (list.json?.words ?? []).find((w) => w.slug === slugs[3]);
+  ok("rejected word is declined in the manage list", !!c && c.status === "declined");
+
+  // clean up the declined probe word
+  const did = c?.id;
+  if (did) await req("DELETE", `/api/admin/words/${did}`);
+
+  const ids = [slugs[0], slugs[1]]
+    .map((s) => (list.json?.words ?? []).find((w) => w.slug === s)?.id)
+    .filter(Boolean);
+  const unpub = await req("POST", "/api/admin/words/batch", { body: { ids, action: "unpublish" } });
+  ok("batch unpublish takes both down", unpub.status === 200 && unpub.json?.succeeded === 2, `got ${unpub.status}`);
+  const gone1 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false });
+  ok("batch-unpublished word hidden from the public → 404", gone1.status === 404);
+  const repub = await req("POST", "/api/admin/words/batch", { body: { ids, action: "republish" } });
+  ok("batch republish brings both back", repub.status === 200 && repub.json?.succeeded === 2);
+  const mixedManage = await req("POST", "/api/admin/words/batch", { body: { ids: [...ids, 999999999], action: "delete" } });
+  ok(
+    "batch delete reports missing ids",
+    mixedManage.status === 200 && mixedManage.json?.succeeded === 2 && mixedManage.json?.failed === 1
+  );
+  const gone2 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false });
+  const gone3 = await req("GET", `/api/words/${slugs[1]}`, { useJar: false });
+  ok("batch-deleted words gone → 404", gone2.status === 404 && gone3.status === 404);
+  const list2 = await req("GET", "/api/admin/words");
+  ok(
+    "manage list no longer contains deleted words",
+    ![slugs[0], slugs[1]].some((s) => (list2.json?.words ?? []).some((w) => w.slug === s))
+  );
+  const manageUnauth = await req("POST", "/api/admin/words/batch", { body: { ids: [1], action: "delete" }, useJar: false });
+  ok("batch manage without login → 401", manageUnauth.status === 401);
+
+  // clean up the declined probe word
+  const cid = (await req("GET", "/api/admin/words")).json?.words?.find((w) => w.slug === slugs[2])?.id;
+  if (cid) await req("DELETE", `/api/admin/words/${cid}`);
+}
+
 await testSeeds();
 await testCron();
 await testAdminWordManagement();
+await testAdminBatch();
 
 // cleanup of this run's data
 await cleanTestRows();

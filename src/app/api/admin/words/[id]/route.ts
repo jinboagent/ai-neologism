@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { qGet, qRun, withTx } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
+import { deleteWordCascade } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -22,25 +23,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!row) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   await withTx(async (tx) => {
-    await tx.execute("DELETE FROM votes WHERE word_id = ?", [row.id]);
-    await tx.execute("DELETE FROM revisions WHERE word_id = ?", [row.id]);
-    await tx.execute("DELETE FROM reviews WHERE word_id = ?", [row.id]);
-    await tx.execute("DELETE FROM words WHERE id = ?", [row.id]);
-    // Clean dangling related-word references on surviving entries.
-    const others = await tx.execute("SELECT id, related_words FROM words WHERE related_words LIKE ?", [`%${row.slug}%`]);
-    for (const o of others.rows) {
-      let arr: unknown;
-      try {
-        arr = JSON.parse(String(o.related_words));
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(arr)) continue;
-      const next = arr.filter((s) => s !== row.slug);
-      if (next.length !== arr.length) {
-        await tx.execute("UPDATE words SET related_words = ? WHERE id = ?", [JSON.stringify(next), Number(o.id)]);
-      }
-    }
+    await deleteWordCascade(tx, row.id, row.slug);
   });
 
   return NextResponse.json({ deleted: row.id, slug: row.slug });

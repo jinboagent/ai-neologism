@@ -1,4 +1,5 @@
 import { qAll, qGet, qRun, withTx } from "./db";
+import type { Client } from "@libsql/client";
 import { canReview } from "./keys";
 
 export type Reference = {
@@ -259,4 +260,36 @@ export function recordVote(
     ]);
     return { ok: true, use_votes: counts.u, work_votes: counts.w };
   });
+}
+
+/**
+ * Permanently remove a word and its children (votes, revisions, reviews) and
+ * repair related-word links on surviving entries. Runs on the caller's
+ * executor so it can join an open transaction — the single-word DELETE and the
+ * admin batch delete share this exact semantics.
+ */
+export async function deleteWordCascade(
+  tx: { execute: Client["execute"] },
+  id: number,
+  slug: string
+): Promise<void> {
+  await tx.execute("DELETE FROM votes WHERE word_id = ?", [id]);
+  await tx.execute("DELETE FROM revisions WHERE word_id = ?", [id]);
+  await tx.execute("DELETE FROM reviews WHERE word_id = ?", [id]);
+  await tx.execute("DELETE FROM words WHERE id = ?", [id]);
+  // Clean dangling related-word references on surviving entries.
+  const others = await tx.execute("SELECT id, related_words FROM words WHERE related_words LIKE ?", [`%${slug}%`]);
+  for (const o of others.rows) {
+    let arr: unknown;
+    try {
+      arr = JSON.parse(String(o.related_words));
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(arr)) continue;
+    const next = arr.filter((s) => s !== slug);
+    if (next.length !== arr.length) {
+      await tx.execute("UPDATE words SET related_words = ? WHERE id = ?", [JSON.stringify(next), Number(o.id)]);
+    }
+  }
 }
