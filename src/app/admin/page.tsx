@@ -25,8 +25,54 @@ type AdminWord = {
   created_at: string;
 };
 
+type ManagedWord = {
+  id: number;
+  slug: string;
+  word: string;
+  status: string;
+  badge: string;
+  input_type: string | null;
+  use_votes: number;
+  work_votes: number;
+  published_at: string | null;
+  created_at: string;
+};
+
 const inputCls = "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary";
 const PAGE_SIZE = 12;
+
+// Common rejection reasons — one click fills the textarea (still editable).
+// Wording is self-contained: it is emailed to the submitter verbatim.
+const REJECT_PRESETS: { label: string; text: string }[] = [
+  {
+    label: "Already exists",
+    text: "The word already exists with this meaning — this is a name collision, not a new coinage.",
+  },
+  {
+    label: "Similar word exists",
+    text: "A very similar word already exists with this meaning; use or improve that entry instead of coining a rival.",
+  },
+  {
+    label: "Not a real phenomenon",
+    text: "The definition does not name a real, observable phenomenon — there is nothing here for a word to attach to.",
+  },
+  {
+    label: "Unclear definition",
+    text: "The definition is unclear or hard to read; the entry cannot be published as written.",
+  },
+  {
+    label: "Weak evidence",
+    text: "The novelty evidence is missing or implausible — the search log does not support the claim that the word is new.",
+  },
+  {
+    label: "Craft rules",
+    text: "The coinage breaks the craft rules: it is hard to pronounce, uses a brand name, or has malformed morphology.",
+  },
+  {
+    label: "Joke coinage",
+    text: "Joke coinage with no observable communicative need.",
+  },
+];
 
 export default function AdminPage() {
   const [session, setSession] = useState<"checking" | "out" | "in">("checking");
@@ -38,6 +84,8 @@ export default function AdminPage() {
   const [queue, setQueue] = useState<AdminWord[]>([]);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminWord | null>(null);
+  const [tab, setTab] = useState<"queue" | "published">("queue");
+  const [published, setPublished] = useState<ManagedWord[] | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,6 +103,13 @@ export default function AdminPage() {
     setPage(1);
   }, []);
 
+  const loadPublished = useCallback(async () => {
+    const res = await fetch("/api/admin/words");
+    if (!res.ok) return;
+    const data = await res.json();
+    setPublished(data.words ?? []);
+  }, []);
+
   useEffect(() => {
     fetch("/api/admin/login")
       .then((r) => r.json())
@@ -63,6 +118,7 @@ export default function AdminPage() {
         if (d.admin) {
           setSession("in");
           loadQueue();
+          loadPublished();
         } else {
           setSession("out");
         }
@@ -86,6 +142,7 @@ export default function AdminPage() {
     setPassword("");
     setSession("in");
     loadQueue();
+    loadPublished();
   }
 
   async function logout() {
@@ -219,18 +276,97 @@ export default function AdminPage() {
     );
   }
 
+  async function unpublish(w: ManagedWord) {
+    const res = await fetch(`/api/admin/words/${w.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "draft" }),
+    });
+    if (res.ok) {
+      setNotice(`Unpublished: ${w.word} — hidden from the public, history kept.`);
+      await loadPublished();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setError(d.message ?? "Unpublish failed");
+    }
+  }
+
+  async function republish(w: ManagedWord) {
+    const res = await fetch(`/api/admin/words/${w.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "published" }),
+    });
+    if (res.ok) {
+      setNotice(`Republished: ${w.word}.`);
+      await loadPublished();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setError(d.message ?? "Republish failed");
+    }
+  }
+
+  async function remove(w: ManagedWord) {
+    if (
+      !window.confirm(
+        `Permanently delete "${w.word}"? Its votes, history, and review record are removed, and links to it on other entries are cleaned. This cannot be undone.`
+      )
+    )
+      return;
+    const res = await fetch(`/api/admin/words/${w.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setNotice(`Deleted: ${w.word}.`);
+      if (selected?.slug === w.slug) setSelected(null);
+      await loadPublished();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setError(d.message ?? "Delete failed");
+    }
+  }
+
+  const statusLabel: Record<string, string> = {
+    published: "Published",
+    draft: "Unpublished",
+    in_review: "In review",
+    returned: "Returned",
+    declined: "Declined",
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="word-title text-3xl font-bold">Admin — API submissions</h1>
+        <h1 className="word-title text-3xl font-bold">Admin</h1>
         <button type="button" onClick={logout} className="text-sm text-muted-foreground hover:text-bad cursor-pointer">
           Log out
         </button>
       </div>
       <p className="mt-1 max-w-2xl text-muted-foreground">
         Third-party API submissions wait here for you alone. You can edit before publishing; rejections notify the
-        submitter at their contact address with your reason.
+        submitter at their contact address with your reason. Published words are managed under “Manage words.”
       </p>
+
+      <div role="tablist" aria-label="Admin sections" className="mt-5 flex flex-wrap gap-2">
+        <button
+          role="tab"
+          aria-selected={tab === "queue"}
+          onClick={() => setTab("queue")}
+          className={`min-h-11 rounded-lg border px-5 text-sm font-medium transition-colors cursor-pointer ${
+            tab === "queue" ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground hover:border-primary"
+          }`}
+        >
+          Review queue ({queue.length})
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "published"}
+          onClick={() => setTab("published")}
+          className={`min-h-11 rounded-lg border px-5 text-sm font-medium transition-colors cursor-pointer ${
+            tab === "published" ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground hover:border-primary"
+          }`}
+        >
+          Manage words{published ? ` (${published.length})` : ""}
+        </button>
+      </div>
 
       {notice && (
         <p role="status" className="mt-4 rounded-lg border border-good/40 bg-good-soft p-3 text-sm text-good">
@@ -243,6 +379,66 @@ export default function AdminPage() {
         </p>
       )}
 
+      {tab === "published" ? (
+        <section aria-label="Published words" className="mt-6">
+          <h2 className="text-lg font-bold">All words in the system</h2>
+          {published === null ? (
+            <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
+          ) : published.length === 0 ? (
+            <p className="mt-3 rounded-xl border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
+              Nothing in the system yet.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {published.map((w) => (
+                <li key={w.id} className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link href={`/words/${w.slug}`} className="word-title text-lg font-bold text-primary hover:underline">
+                      {w.word}
+                    </Link>
+                    <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${w.status === "published" ? "border-good/30 bg-good-soft text-good" : "border-border bg-muted text-muted-foreground"}`}>
+                      {statusLabel[w.status] ?? w.status}
+                    </span>
+                    <Badge kind={w.badge} />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground/80">
+                    {w.use_votes} would use · {w.work_votes} needs work · {w.input_type ?? "unknown source"} · created{" "}
+                    {w.created_at.slice(0, 10)}
+                    {w.published_at ? ` · published ${w.published_at.slice(0, 10)}` : ""}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {w.status === "published" && (
+                      <button
+                        type="button"
+                        onClick={() => unpublish(w)}
+                        className="min-h-11 rounded-lg border border-border px-4 text-sm text-muted-foreground hover:border-warn hover:text-warn transition-colors cursor-pointer"
+                      >
+                        Unpublish
+                      </button>
+                    )}
+                    {w.status === "draft" && (
+                      <button
+                        type="button"
+                        onClick={() => republish(w)}
+                        className="min-h-11 rounded-lg border border-good bg-good-soft px-4 text-sm font-medium text-good hover:opacity-90 transition-opacity cursor-pointer"
+                      >
+                        Republish
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => remove(w)}
+                      className="min-h-11 rounded-lg border border-bad bg-bad-soft px-4 text-sm font-medium text-bad hover:opacity-90 transition-colors cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : (
       <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_3fr]">
         <section aria-label="API submission queue">
           <h2 className="text-lg font-bold">Queue ({queue.length})</h2>
@@ -329,6 +525,19 @@ export default function AdminPage() {
                   <span className="text-sm font-medium">Reason (required for rejection — emailed to the submitter; optional on approve)</span>
                   <textarea className={`${inputCls} mt-1`} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </label>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Common reasons:</span>
+                  {REJECT_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setReason(p.text)}
+                      className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-warn hover:text-warn cursor-pointer"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   disabled={busy}
@@ -347,6 +556,7 @@ export default function AdminPage() {
           )}
         </section>
       </div>
+      )}
     </div>
   );
 }

@@ -481,8 +481,60 @@ await testKeys(ctx);
 await testEditing(ctx);
 await testCommunityReview(ctx);
 await testApiChannelAndAdmin();
+async function testAdminWordManagement() {
+  section("J. Admin word management");
+  const login = await req("POST", "/api/admin/login", {
+    body: { username: ADMIN_USER, password: ADMIN_PASS },
+    headers: { "User-Agent": `zztest-suite-${TS}` },
+  });
+  ok("admin login for management", login.status === 200);
+
+  const sub = await req("POST", "/api/words", {
+    headers: { "X-Contribution-Key": "ck_zztest_manage" },
+    body: {
+      word: `zztest${TS}manage`,
+      definition: "A word created to prove the admin can unpublish, republish, and delete it.",
+      verification: { verdict: "NEW", checked_at: "2026-11-01", method: "test package", queries: [], note: "test" },
+    },
+    useJar: false,
+  });
+  ok("management test word submitted", sub.status === 202);
+  const slug = sub.json?.slug;
+
+  const approve = await req("POST", "/api/admin/review", {
+    body: { slug, action: "approve", reason: "" },
+  });
+  ok("one-click approval (empty reason) publishes", approve.status === 200 && approve.json?.status === "published", `got ${approve.status}`);
+
+  const list1 = await req("GET", "/api/admin/words");
+  const entry = (list1.json?.words ?? []).find((w) => w.slug === slug);
+  ok("manage list contains the published word", !!entry && entry.status === "published");
+  ok("manage list excludes private fields", !JSON.stringify(list1.text).includes("contributor_key_hash"));
+
+  const unpub = await req("PATCH", `/api/admin/words/${entry.id}`, { body: { status: "draft" } });
+  ok("unpublish → draft", unpub.status === 200 && unpub.json?.status === "draft");
+  const hidden = await req("GET", `/api/words/${slug}`, { useJar: false });
+  ok("unpublished word hidden from the public → 404", hidden.status === 404);
+
+  const repub = await req("PATCH", `/api/admin/words/${entry.id}`, { body: { status: "published" } });
+  ok("republish → published", repub.status === 200 && repub.json?.status === "published");
+  const visible = await req("GET", `/api/words/${slug}`, { useJar: false });
+  ok("republished word visible again", visible.status === 200);
+
+  const del = await req("DELETE", `/api/admin/words/${entry.id}`);
+  ok("delete → removed", del.status === 200 && del.json?.slug === slug);
+  const gone = await req("GET", `/api/words/${slug}`, { useJar: false });
+  ok("deleted word gone → 404", gone.status === 404);
+  const list2 = await req("GET", "/api/admin/words");
+  ok("manage list no longer contains it", !(list2.json?.words ?? []).some((w) => w.slug === slug));
+
+  const unauth = await req("GET", "/api/admin/words", { useJar: false });
+  ok("manage list without login → 401", unauth.status === 401);
+}
+
 await testSeeds();
 await testCron();
+await testAdminWordManagement();
 
 // cleanup of this run's data
 if (fs.existsSync(dbFile)) {
