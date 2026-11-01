@@ -17,7 +17,7 @@ export default async function PopularityPage({ searchParams }: { searchParams: P
   const { lens: raw } = await searchParams;
   const lens = (LENSES.some((l) => l.key === raw) ? raw : "trending") as PopularityLens;
   const active = LENSES.find((l) => l.key === lens)!;
-  const words = popularity(lens, 10);
+  const words = await popularity(lens, 10);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">

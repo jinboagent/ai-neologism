@@ -10,120 +10,120 @@ import {
   REVIEW_THRESHOLD,
 } from "@/lib/keys";
 import { getDb } from "@/lib/db";
-import { insertKey, resetDb } from "../helpers/db";
+import { insertKey, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 
-beforeEach(() => {
-  resetDb();
+beforeEach(async () => {
+  await resetDb();
 });
 
 describe("REVIEW_THRESHOLD", () => {
-  it("is read from the environment with a default of 3", () => {
+  it("is read from the environment with a default of 3", async () => {
     expect(REVIEW_THRESHOLD).toBe(3);
   });
 
-  it("exposes the cookie name used across the app", () => {
+  it("exposes the cookie name used across the app", async () => {
     expect(KEY_COOKIE).toBe("ck");
   });
 });
 
 describe("hashKey", () => {
-  it("produces a 64-character lowercase sha256 digest", () => {
+  it("produces a 64-character lowercase sha256 digest", async () => {
     const h = hashKey("ck_abc123");
     expect(h).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("is deterministic", () => {
+  it("is deterministic", async () => {
     expect(hashKey("ck_same")).toBe(hashKey("ck_same"));
   });
 
-  it("distinguishes different keys", () => {
+  it("distinguishes different keys", async () => {
     expect(hashKey("ck_one")).not.toBe(hashKey("ck_two"));
   });
 
-  it("trims surrounding whitespace so a pasted key still matches", () => {
+  it("trims surrounding whitespace so a pasted key still matches", async () => {
     expect(hashKey("  ck_abc  ")).toBe(hashKey("ck_abc"));
     expect(hashKey("\tck_abc\n")).toBe(hashKey("ck_abc"));
   });
 
-  it("does not leak the key itself", () => {
+  it("does not leak the key itself", async () => {
     expect(hashKey("ck_secret")).not.toContain("secret");
   });
 });
 
 describe("issueKey", () => {
-  it("returns a ck_-prefixed key with 48 hex characters of entropy", () => {
-    const { key } = issueKey();
+  it("returns a ck_-prefixed key with 48 hex characters of entropy", async () => {
+    const { key } = await issueKey();
     expect(key).toMatch(/^ck_[0-9a-f]{48}$/);
   });
 
-  it("returns a key and its matching hash", () => {
-    const { key, keyHash } = issueKey();
+  it("returns a key and its matching hash", async () => {
+    const { key, keyHash } = await issueKey();
     expect(keyHash).toBe(hashKey(key));
   });
 
-  it("persists the hash with zero accepted words", () => {
-    const { keyHash } = issueKey();
-    const rec = keyRecord(keyHash);
+  it("persists the hash with zero accepted words", async () => {
+    const { keyHash } = await issueKey();
+    const rec = await keyRecord(keyHash);
     expect(rec).toBeDefined();
     expect(rec?.accepted_words).toBe(0);
   });
 
-  it("never stores the plaintext key", () => {
-    const { key } = issueKey();
-    const rows = getDb().prepare("SELECT * FROM keys").all() as Record<string, unknown>[];
+  it("never stores the plaintext key", async () => {
+    const { key } = await issueKey();
+    const rows = (await rawAll("SELECT * FROM keys")) as Record<string, unknown>[];
     expect(JSON.stringify(rows)).not.toContain(key);
   });
 
-  it("issues a fresh key on every call", () => {
-    const a = issueKey();
-    const b = issueKey();
+  it("issues a fresh key on every call", async () => {
+    const a = await issueKey();
+    const b = await issueKey();
     expect(a.key).not.toBe(b.key);
     expect(a.keyHash).not.toBe(b.keyHash);
   });
 });
 
 describe("keyRecord", () => {
-  it("returns undefined for an unknown hash", () => {
-    expect(keyRecord("nope")).toBeUndefined();
+  it("returns undefined for an unknown hash", async () => {
+    expect(await keyRecord("nope")).toBeUndefined();
   });
 
-  it("returns the stored record for a known hash", () => {
-    insertKey("hash-a", 2);
-    expect(keyRecord("hash-a")?.accepted_words).toBe(2);
+  it("returns the stored record for a known hash", async () => {
+    await insertKey("hash-a", 2);
+    expect((await keyRecord("hash-a"))?.accepted_words).toBe(2);
   });
 });
 
 describe("canReview", () => {
-  it("is false for an unknown key hash", () => {
-    expect(canReview("stranger")).toBe(false);
+  it("is false for an unknown key hash", async () => {
+    expect(await canReview("stranger")).toBe(false);
   });
 
-  it("is false below the threshold", () => {
-    insertKey("k0", 0);
-    insertKey("k2", REVIEW_THRESHOLD - 1);
-    expect(canReview("k0")).toBe(false);
-    expect(canReview("k2")).toBe(false);
+  it("is false below the threshold", async () => {
+    await insertKey("k0", 0);
+    await insertKey("k2", REVIEW_THRESHOLD - 1);
+    expect(await canReview("k0")).toBe(false);
+    expect(await canReview("k2")).toBe(false);
   });
 
-  it("is true at exactly the threshold", () => {
-    insertKey("k3", REVIEW_THRESHOLD);
-    expect(canReview("k3")).toBe(true);
+  it("is true at exactly the threshold", async () => {
+    await insertKey("k3", REVIEW_THRESHOLD);
+    expect(await canReview("k3")).toBe(true);
   });
 
-  it("is true above the threshold", () => {
-    insertKey("k9", REVIEW_THRESHOLD + 6);
-    expect(canReview("k9")).toBe(true);
+  it("is true above the threshold", async () => {
+    await insertKey("k9", REVIEW_THRESHOLD + 6);
+    expect(await canReview("k9")).toBe(true);
   });
 });
 
 describe("acceptedWordsCount", () => {
-  it("returns 0 for an unknown key rather than undefined", () => {
-    expect(acceptedWordsCount("ghost")).toBe(0);
+  it("returns 0 for an unknown key rather than undefined", async () => {
+    expect(await acceptedWordsCount("ghost")).toBe(0);
   });
 
-  it("returns the stored count", () => {
-    insertKey("k5", 5);
-    expect(acceptedWordsCount("k5")).toBe(5);
+  it("returns the stored count", async () => {
+    await insertKey("k5", 5);
+    expect(await acceptedWordsCount("k5")).toBe(5);
   });
 });
 

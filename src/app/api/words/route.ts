@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { qAll, qGet, withTx } from "@/lib/db";
 import { acceptedWordsCount, issueKey, KEY_COOKIE, resolveKeyHash, REVIEW_THRESHOLD } from "@/lib/keys";
 import { rateLimit } from "@/lib/ratelimit";
 import { badgeFromVerdict, verifyNovelty } from "@/lib/verify";
-import { hydrate, LIMITS, listPublished, toPublic, uniqueSlug, type Reference, type Verification } from "@/lib/words";
+import { CATEGORIES } from "@/lib/categories";
+import {
+  clampText,
+  sanitizeAlternatives,
+  sanitizeCategories,
+  sanitizeReferences,
+  sanitizeSlugList,
+  sanitizeVerification,
+} from "@/lib/sanitize";
+import { countPublished, hydrate, LIMITS, listPublished, slugify, toPublic, type Reference } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +33,15 @@ export async function GET(req: Request) {
   if (mine) {
     const keyHash = await resolveKeyHash(req);
     if (!keyHash) return NextResponse.json({ error: "NO_KEY", words: [] }, { status: 401 });
-    const rows = getDb()
-      .prepare("SELECT * FROM words WHERE contributor_key_hash = ? ORDER BY updated_at DESC")
-      .all(keyHash) as never[];
+    const rows = await qAll<never>("SELECT * FROM words WHERE contributor_key_hash = ? ORDER BY updated_at DESC", [keyHash]);
     return NextResponse.json({ words: rows.map(hydrate).map(toPublic) });
   }
 
-  const words = listPublished({ limit, offset: (page - 1) * limit });
-  return NextResponse.json({ words: words.map(toPublic), page, count: words.length });
+  const words = await listPublished({ limit, offset: (page - 1) * limit });
+  // `count` is the total number of published words (finding #9: it used to report
+  // the current page's size); `page_size` is the number of items on this page.
+  const total = await countPublished();
+  return NextResponse.json({ words: words.map(toPublic), page, count: total, page_size: words.length });
 }
 
 type Submission = {
@@ -47,7 +57,6 @@ type Submission = {
   categories?: string[];
   ai_assisted?: boolean;
   input_type?: string;
-  verification?: Verification;
   contact_email?: string;
 };
 
@@ -84,6 +93,31 @@ export async function POST(req: Request) {
     );
   }
 
+  // Field bounds enforced on every write path (finding #3): PUT and the admin
+  // edit already did this; POST now matches instead of storing unbounded text.
+  const pronunciation = clampText(body.pronunciation, LIMITS.pronunciation.max);
+  const partOfSpeech = clampText(body.part_of_speech, LIMITS.partOfSpeech.max) || "noun";
+  const explanation = clampText(body.explanation, LIMITS.explanation.max);
+  const whyThisWord = clampText(body.why_this_word, LIMITS.whyThisWord.max);
+  const tooLong: [string, number, number][] = [
+    ["pronunciation", body.pronunciation?.trim().length ?? 0, LIMITS.pronunciation.max],
+    ["part_of_speech", body.part_of_speech?.trim().length ?? 0, LIMITS.partOfSpeech.max],
+    ["explanation", body.explanation?.trim().length ?? 0, LIMITS.explanation.max],
+    ["why_this_word", body.why_this_word?.trim().length ?? 0, LIMITS.whyThisWord.max],
+  ];
+  const over = tooLong.find(([, len, max]) => len > max);
+  if (over) {
+    return NextResponse.json(
+      { error: "FIELD_TOO_LONG", message: `${over[0]} must be at most ${over[2]} characters.` },
+      { status: 400 }
+    );
+  }
+
+  const references = sanitizeReferences(body.references);
+  const alternatives = sanitizeAlternatives(body.alternatives);
+  const relatedWords = sanitizeSlugList(body.related_words);
+  const categories = sanitizeCategories(body.categories, CATEGORIES);
+
   // Channel detection: non-browser clients authenticate via the header, so their
   // submissions are flagged 'api' server-side (client-supplied input_type is not
   // trusted). API words go to the admin-only review queue.
@@ -94,7 +128,7 @@ export async function POST(req: Request) {
   let keyHash = await resolveKeyHash(req);
   let newKey: string | undefined;
   if (!keyHash) {
-    const issued = issueKey();
+    const issued = await issueKey();
     keyHash = issued.keyHash;
     newKey = issued.key;
   }
@@ -102,10 +136,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many submissions this hour." }, { status: 429 });
   }
 
-  const db = getDb();
-  const dup = db
-    .prepare("SELECT slug, status FROM words WHERE LOWER(word) = LOWER(?)")
-    .get(word) as { slug: string; status: string } | undefined;
+  const dup = await qGet<{ slug: string; status: string }>("SELECT slug, status FROM words WHERE LOWER(word) = LOWER(?)", [word]);
   if (dup && dup.status !== "declined") {
     return NextResponse.json(
       { error: "DUPLICATE_WORD", message: `The word "${word}" already exists (${dup.slug}, ${dup.status}).` },
@@ -113,11 +144,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Novelty verification: trust a supplied evidence package, otherwise run it now.
-  let verification = body.verification;
-  if (!verification || !verification.verdict) {
-    verification = await verifyNovelty(word, definition);
-  }
+  // Novelty verification is server-authoritative (finding #4): a caller-supplied
+  // verification package is never trusted for the verdict — the search always runs
+  // here, so a fabricated "NEW" cannot mint a badge. The client package is discarded.
+  const verification = await verifyNovelty(word, definition);
   if (verification.verdict === "EXISTS") {
     return NextResponse.json(
       {
@@ -134,49 +164,58 @@ export async function POST(req: Request) {
   // fast-path check above and would otherwise land as two rows differing only by
   // case, each with its own auto-suffixed slug.
   type InsertOutcome = { conflict: { slug: string; status: string } } | { slug: string };
-  const insertSubmission = db.transaction((): InsertOutcome => {
-    const race = db
-      .prepare("SELECT slug, status FROM words WHERE LOWER(word) = LOWER(?)")
-      .get(word) as { slug: string; status: string } | undefined;
-    if (race && race.status !== "declined") return { conflict: race };
+  const insertSubmission = (): Promise<InsertOutcome> =>
+    withTx(async (tx): Promise<InsertOutcome> => {
+      const raceRes = await tx.execute("SELECT slug, status FROM words WHERE LOWER(word) = LOWER(?)", [word]);
+      const race = raceRes.rows[0] as unknown as { slug: string; status: string } | undefined;
+      if (race && race.status !== "declined") return { conflict: race };
 
-    const newSlug = uniqueSlug(word);
-    const info = db
-      .prepare(
+      // Slug uniqueness is checked on the transaction itself — the embedded
+      // client has a single connection, and a nested main-client call while the
+      // transaction is open would deadlock (TRANSACTION_ACTIVE).
+      const base = slugify(word) || "word";
+      let newSlug = base;
+      let n = 2;
+      while (true) {
+        const slugTaken = await tx.execute("SELECT 1 FROM words WHERE slug = ?", [newSlug]);
+        if (slugTaken.rows.length === 0) break;
+        newSlug = `${base}-${n++}`;
+      }
+      const info = await tx.execute(
         `INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
           alternatives_json, verification_json, references_json, related_words, categories_json,
           ai_assisted, status, badge, input_type, contributor_key_hash, contact_email)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_review', ?, ?, ?, ?)`
-      )
-      .run(
-        newSlug,
-        word,
-        body.pronunciation?.trim() || null,
-        body.part_of_speech?.trim() || "noun",
-        definition,
-        body.explanation?.trim() ?? "",
-        body.why_this_word?.trim() ?? "",
-        JSON.stringify((body.alternatives ?? []).slice(0, LIMITS.alternatives)),
-        JSON.stringify(verification),
-        JSON.stringify((body.references ?? []).slice(0, LIMITS.references)),
-        JSON.stringify((body.related_words ?? []).slice(0, LIMITS.relatedWords)),
-        JSON.stringify((body.categories ?? []).slice(0, LIMITS.categories)),
-        body.ai_assisted ? 1 : 0,
-        badgeFromVerdict(verification.verdict),
-        inputType,
-        keyHash,
-        contactEmail || null
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_review', ?, ?, ?, ?)`,
+        [
+          newSlug,
+          word,
+          pronunciation || null,
+          partOfSpeech,
+          definition,
+          explanation,
+          whyThisWord,
+          JSON.stringify(alternatives),
+          JSON.stringify(verification),
+          JSON.stringify(references),
+          JSON.stringify(relatedWords),
+          JSON.stringify(categories),
+          body.ai_assisted ? 1 : 0,
+          badgeFromVerdict(verification.verdict),
+          inputType,
+          keyHash as string,
+          contactEmail || null,
+        ]
       );
+      const wordId = Number(info.lastInsertRowid);
+      await tx.execute("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, 'Initial submission', ?)", [
+        wordId,
+        keyHash as string,
+        JSON.stringify({ word, definition }),
+      ]);
+      return { slug: newSlug };
+    });
 
-    db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, 'Initial submission', ?)").run(
-      info.lastInsertRowid,
-      keyHash,
-      JSON.stringify({ word, definition })
-    );
-    return { slug: newSlug };
-  });
-
-  const outcome = insertSubmission();
+  const outcome = await insertSubmission();
   if ("conflict" in outcome) {
     return NextResponse.json(
       {
@@ -197,7 +236,7 @@ export async function POST(req: Request) {
       key: newKey,
       // acceptedWordsCount tolerates a key hash that was never issued — reading the row
       // directly threw on the documented `X-Contribution-Key: ck_...` curl path.
-      accepted_words: acceptedWordsCount(keyHash),
+      accepted_words: await acceptedWordsCount(keyHash),
       review_threshold: REVIEW_THRESHOLD,
     },
     { status: 202 }
@@ -206,6 +245,7 @@ export async function POST(req: Request) {
     res.cookies.set(KEY_COOKIE, newKey, {
       httpOnly: true,
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
     });

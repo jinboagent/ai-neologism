@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IconThumbDown, IconThumbUp } from "./icons";
 
 export function VoteWidget({
@@ -17,6 +17,27 @@ export function VoteWidget({
   const [myVote, setMyVote] = useState<0 | 1 | -1>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync with the server once on mount: a returning voter's prior vote is
+  // recorded under their fingerprint, and the toggle must reflect it (finding #6).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/words/${slug}/vote`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        setUse(d.use_votes);
+        setWork(d.work_votes);
+        const v = d.my_vote;
+        if (v === 1 || v === -1) setMyVote(v);
+      })
+      .catch(() => {
+        /* state stays as rendered */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   async function cast(vote: 1 | -1) {
     if (busy) return;

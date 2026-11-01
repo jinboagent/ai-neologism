@@ -121,6 +121,7 @@ export function WordForm({
   submitting,
   submitLabel,
   children,
+  lockWord = false,
 }: {
   form: FormState;
   setForm: (f: FormState) => void;
@@ -128,6 +129,9 @@ export function WordForm({
   submitting: boolean;
   submitLabel: string;
   children?: React.ReactNode;
+  /** Admin edits keep the coinage fixed: renaming a word changes its slug and
+   * every link to it, so the field is display-only there (bug report #8). */
+  lockWord?: boolean;
 }) {
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm({ ...form, [key]: value });
   const toggleCategory = (c: string) =>
@@ -144,8 +148,16 @@ export function WordForm({
       {children}
       <div className="grid gap-5 sm:grid-cols-3">
         <div className="sm:col-span-2">
-          <Field label="Word" hint="required — 2 to 80 characters">
-            <input className={inputCls} value={form.word} onChange={(e) => set("word", e.target.value)} required minLength={2} maxLength={80} />
+          <Field label="Word" hint={lockWord ? "fixed after submission" : "required — 2 to 80 characters"}>
+            <input
+              className={`${inputCls} ${lockWord ? "bg-muted/50" : ""}`}
+              value={form.word}
+              onChange={(e) => set("word", e.target.value)}
+              required
+              minLength={2}
+              maxLength={80}
+              readOnly={lockWord}
+            />
           </Field>
         </div>
         <Field label="Part of speech">

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { qGet, qRun } from "@/lib/db";
 import { canReview, resolveKeyHash } from "@/lib/keys";
 import { rateLimit } from "@/lib/ratelimit";
+import { CATEGORIES } from "@/lib/categories";
+import { sanitizeAlternatives, sanitizeCategories, sanitizeReferences, sanitizeSlugList } from "@/lib/sanitize";
 import { getWord, LIMITS, parseJsonColumn, toPublic, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const keyHash = await resolveKeyHash(req);
-  const word = getWord(slug, keyHash);
+  const word = await getWord(slug, keyHash);
   if (!word) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   return NextResponse.json({ word: toPublic(word) });
 }
@@ -22,15 +24,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
 
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM words WHERE slug = ?").get(slug) as WordRow | undefined;
+  const row = await qGet<WordRow>("SELECT * FROM words WHERE slug = ?", [slug]);
   if (!row) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   // Editing requires ownership or review rights. The previous check also allowed any
   // key holder to edit any *published* word, because "status !== 'published'" made the
   // whole condition false and skipped the owner comparison entirely.
   const isOwner = row.contributor_key_hash === keyHash;
-  if (!isOwner && !canReview(keyHash)) {
+  if (!isOwner && !(await canReview(keyHash))) {
     return NextResponse.json(
       { error: "FORBIDDEN", message: "Only the contributor or a reviewer may edit this word." },
       { status: 403 }
@@ -75,43 +76,50 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
     );
   }
 
-  // Arrays only, matching POST. parseJsonColumn keeps a corrupt stored column from
-  // throwing where the previous bare JSON.parse would have produced a 500.
-  const jsonList = (v: unknown, current: string, max: number): string => {
-    const list = Array.isArray(v) ? v : parseJsonColumn<unknown[]>(current, []);
-    return JSON.stringify(list.slice(0, max));
-  };
+  // Arrays only, matching POST — and run through the same sanitisers (finding #1/#3:
+  // unbounded items and javascript: URLs used to slip through here). A field that is
+  // absent from the body keeps its stored value.
+  const listOrCurrent = <T,>(v: unknown, current: string, sanitize: (raw: unknown) => T[], currentParse: string): T[] =>
+    v !== undefined ? sanitize(v) : parseJsonColumn<T[]>(currentParse ?? current, []);
+  const nextAlternatives = listOrCurrent(body.alternatives, row.alternatives_json, sanitizeAlternatives, "[]");
+  const nextReferences = listOrCurrent(body.references, row.references_json, sanitizeReferences, "[]");
+  const nextRelated = listOrCurrent(body.related_words, row.related_words, sanitizeSlugList, "[]");
+  const nextCategories = listOrCurrent(body.categories, row.categories_json, (raw) => sanitizeCategories(raw, CATEGORIES), "[]");
 
-  db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, ?, ?)").run(
-    row.id,
-    keyHash,
-    String(body.summary ?? "Edited").slice(0, 200),
-    JSON.stringify({
-      definition: row.definition,
-      explanation: row.explanation,
-      why_this_word: row.why_this_word,
-    })
+  await qRun(
+    "INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, ?, ?)",
+    [
+      row.id,
+      keyHash,
+      String(body.summary ?? "Edited").slice(0, 200),
+      JSON.stringify({
+        definition: row.definition,
+        explanation: row.explanation,
+        why_this_word: row.why_this_word,
+      }),
+    ]
   );
 
-  db.prepare(
+  await qRun(
     `UPDATE words SET pronunciation=?, part_of_speech=?, definition=?, explanation=?, why_this_word=?,
      alternatives_json=?, references_json=?, related_words=?, categories_json=?, updated_at=datetime('now'),
      status = CASE WHEN status='returned' THEN 'in_review' ELSE status END,
      return_notes = CASE WHEN status='returned' THEN NULL ELSE return_notes END
-     WHERE id=?`
-  ).run(
-    pronunciation,
-    partOfSpeech,
-    definition,
-    explanation,
-    whyThisWord,
-    jsonList(body.alternatives, row.alternatives_json, LIMITS.alternatives),
-    jsonList(body.references, row.references_json, LIMITS.references),
-    jsonList(body.related_words, row.related_words, LIMITS.relatedWords),
-    jsonList(body.categories, row.categories_json, LIMITS.categories),
-    row.id
+     WHERE id=?`,
+    [
+      pronunciation,
+      partOfSpeech,
+      definition,
+      explanation,
+      whyThisWord,
+      JSON.stringify(nextAlternatives),
+      JSON.stringify(nextReferences),
+      JSON.stringify(nextRelated),
+      JSON.stringify(nextCategories),
+      row.id,
+    ]
   );
 
-  const updated = getWord(slug, keyHash);
+  const updated = await getWord(slug, keyHash);
   return NextResponse.json({ word: updated ? toPublic(updated) : null });
 }

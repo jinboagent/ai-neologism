@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/words/route";
 import { getDb } from "@/lib/db";
 import { hashKey } from "@/lib/keys";
-import { fetchWordRow, insertKey, insertWord, resetDb } from "../helpers/db";
-import { DDG_NO_RESULTS_HTML, mockFetch } from "../helpers/fetch";
+import { CATEGORIES } from "@/lib/categories";
+import { fetchWordRow, insertKey, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
+import { DDG_NO_RESULTS_HTML, ddgHtml, dictionaryPayload, mockFetch } from "../helpers/fetch";
 
-beforeEach(() => {
-  resetDb();
+beforeEach(async () => {
+  await resetDb();
   vi.unstubAllGlobals();
+  // Hermetic default: every POST re-runs novelty verification server-side, so
+  // tests without a specific plan would otherwise hit the real network — slow
+  // and flaky. Tests that need a particular verdict call mockFetch themselves,
+  // replacing this stub for the duration of the test.
+  mockFetch({ search: { html: DDG_NO_RESULTS_HTML }, dictionary: { status: 404 } });
 });
 
 const NEW_VERIFICATION = { verdict: "NEW" as const, note: "supplied by test" };
@@ -73,7 +79,7 @@ describe("POST /api/words · validation", () => {
   it("trims surrounding whitespace before validating", async () => {
     const res = await POST(post({ word: "  zephquake  ", definition: "  A tremor of public confidence.  ", verification: NEW_VERIFICATION }));
     expect(res.status).toBe(202);
-    expect(fetchWordRow("zephquake")?.word).toBe("zephquake");
+    expect((await fetchWordRow("zephquake"))?.word).toBe("zephquake");
   });
 });
 
@@ -99,7 +105,7 @@ describe("POST /api/words · contribution keys", () => {
   it("attributes the submission to the supplied key", async () => {
     const key = nextKey();
     await POST(post(valid(), { "X-Contribution-Key": key }));
-    expect(fetchWordRow("zephquake")?.contributor_key_hash).toBe(hashKey(key));
+    expect((await fetchWordRow("zephquake"))?.contributor_key_hash).toBe(hashKey(key));
   });
 
   it("does not crash on a key that was never issued", async () => {
@@ -119,20 +125,20 @@ describe("POST /api/words · contribution keys", () => {
 
 describe("POST /api/words · duplicates", () => {
   it("rejects a word that already exists", async () => {
-    insertWord({ slug: "zephquake", word: "zephquake", status: "in_review" });
+    await insertWord({ slug: "zephquake", word: "zephquake", status: "in_review" });
     const res = await POST(post(valid()));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe("DUPLICATE_WORD");
   });
 
   it("matches duplicates case-insensitively", async () => {
-    insertWord({ slug: "zephquake", word: "ZephQuake", status: "published" });
+    await insertWord({ slug: "zephquake", word: "ZephQuake", status: "published" });
     const res = await POST(post(valid("ZEPHQUAKE")));
     expect(res.status).toBe(409);
   });
 
   it("allows resubmitting a word that was declined", async () => {
-    insertWord({ slug: "zephquake", word: "zephquake", status: "declined" });
+    await insertWord({ slug: "zephquake", word: "zephquake", status: "declined" });
     const res = await POST(post(valid()));
     expect(res.status).toBe(202);
     expect((await res.json()).slug).toBe("zephquake-2");
@@ -141,30 +147,59 @@ describe("POST /api/words · duplicates", () => {
   it("creates one row, not two, when the same word is submitted twice", async () => {
     await POST(post(valid(), { "X-Contribution-Key": nextKey() }));
     await POST(post(valid(), { "X-Contribution-Key": nextKey() }));
-    const n = getDb().prepare("SELECT COUNT(*) AS n FROM words").get() as { n: number };
+    const n = await rawGet("SELECT COUNT(*) AS n FROM words") as { n: number };
     expect(n.n).toBe(1);
   });
 });
 
 describe("POST /api/words · novelty gate", () => {
-  it("blocks a submission whose verification verdict is EXISTS", async () => {
-    const res = await POST(post({ ...valid(), verification: { verdict: "EXISTS" } }));
+  it("blocks a submission when the server-side verification verdict is EXISTS", async () => {
+    // Server-authoritative (finding #4): the client package claims NEW, but the
+    // server re-runs the search — two results using the word with ≥2 definition
+    // keywords — and the EXISTS verdict wins.
+    mockFetch({
+      search: {
+        html: ddgHtml([
+          {
+            title: "zephquake",
+            url: "https://a.example/zephquake",
+            snippet: "Zephquake is a sudden tremor of public confidence that follows a disclosure.",
+          },
+          {
+            title: "What is zephquake?",
+            url: "https://b.example/meaning",
+            snippet: "The zephquake — a sudden tremor of public confidence after a disclosure.",
+          },
+        ]),
+      },
+      dictionary: { status: 404 },
+    });
+    const res = await POST(post(valid()));
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error).toBe("NAME_COLLISION");
     expect(body.verification.verdict).toBe("EXISTS");
-    expect(fetchWordRow("zephquake")).toBeUndefined();
+    expect((await fetchWordRow("zephquake"))).toBeUndefined();
   });
 
   it("accepts NEAR_EXISTING and stamps the matching badge", async () => {
-    const res = await POST(post({ ...valid(), verification: { verdict: "NEAR_EXISTING" } }));
+    // The word form is in the dictionary with a different sense (≤1 definition
+    // keyword overlaps), so the server verdict is NEAR_EXISTING — regardless of
+    // the client package claiming NEW.
+    mockFetch({
+      search: { html: DDG_NO_RESULTS_HTML },
+      dictionary: { status: 200, json: dictionaryPayload(["A sudden shaking of the ground."], "zephquake") },
+    });
+    const res = await POST(post(valid()));
     expect(res.status).toBe(202);
     expect((await res.json()).badge).toBe("near_existing");
-    expect(fetchWordRow("zephquake")?.badge).toBe("near_existing");
+    expect((await fetchWordRow("zephquake"))?.badge).toBe("near_existing");
   });
 
   it("accepts UNVERIFIED so a reviewer can inspect it, flagged", async () => {
-    const res = await POST(post({ ...valid(), verification: { verdict: "UNVERIFIED" } }));
+    // Search provider unreachable server-side → UNVERIFIED, not a false NEW.
+    mockFetch({ search: { throws: "down" }, dictionary: { status: 404 } });
+    const res = await POST(post(valid()));
     expect(res.status).toBe(202);
     expect((await res.json()).badge).toBe("unverified");
   });
@@ -188,16 +223,14 @@ describe("POST /api/words · novelty gate", () => {
 
   it("stores the word in the review queue rather than publishing it", async () => {
     await POST(post(valid(), { "X-Contribution-Key": nextKey() }));
-    const row = fetchWordRow("zephquake");
+    const row = await fetchWordRow("zephquake");
     expect(row?.status).toBe("in_review");
     expect(row?.published_at).toBeNull();
   });
 
   it("writes an initial revision snapshot", async () => {
     await POST(post(valid(), { "X-Contribution-Key": nextKey() }));
-    const rev = getDb()
-      .prepare("SELECT summary, snapshot_json FROM revisions ORDER BY id DESC LIMIT 1")
-      .get() as { summary: string; snapshot_json: string };
+    const rev = (await rawGet("SELECT summary, snapshot_json FROM revisions ORDER BY id DESC LIMIT 1")) as { summary: string; snapshot_json: string };
     expect(rev.summary).toBe("Initial submission");
     expect(JSON.parse(rev.snapshot_json)).toMatchObject({ word: "zephquake" });
   });
@@ -205,6 +238,9 @@ describe("POST /api/words · novelty gate", () => {
 
 describe("POST /api/words · field limits", () => {
   it("caps the number of stored alternatives, references and related words", async () => {
+    // Categories outside the fixed whitelist are dropped (finding #3 hardening),
+    // so the overflow feeds valid names — capping, not whitelisting, is asserted.
+    mockFetch({ search: { html: DDG_NO_RESULTS_HTML }, dictionary: { status: 404 } });
     const res = await POST(
       post(
         {
@@ -212,13 +248,13 @@ describe("POST /api/words · field limits", () => {
           alternatives: Array.from({ length: 20 }, (_, i) => ({ word: `alt${i}`, rationale: "r" })),
           references: Array.from({ length: 20 }, (_, i) => ({ type: "news", title: `t${i}` })),
           related_words: Array.from({ length: 20 }, (_, i) => `rel${i}`),
-          categories: Array.from({ length: 20 }, (_, i) => `cat${i}`),
+          categories: Array.from({ length: 20 }, (_, i) => CATEGORIES[i % CATEGORIES.length]),
         },
         { "X-Contribution-Key": nextKey() }
       )
     );
     expect(res.status).toBe(202);
-    const row = fetchWordRow("zephquake");
+    const row = await fetchWordRow("zephquake");
     expect(JSON.parse(row!.alternatives_json)).toHaveLength(8);
     expect(JSON.parse(row!.references_json)).toHaveLength(12);
     expect(JSON.parse(row!.related_words)).toHaveLength(12);
@@ -227,7 +263,7 @@ describe("POST /api/words · field limits", () => {
 
   it("defaults part_of_speech to noun and leaves pronunciation null", async () => {
     await POST(post(valid(), { "X-Contribution-Key": nextKey() }));
-    const row = fetchWordRow("zephquake");
+    const row = await fetchWordRow("zephquake");
     expect(row?.part_of_speech).toBe("noun");
     expect(row?.pronunciation).toBeNull();
   });
@@ -235,6 +271,9 @@ describe("POST /api/words · field limits", () => {
 
 describe("POST /api/words · rate limiting", () => {
   it("allows ten submissions per key per hour, then returns 429", async () => {
+    // Each submission re-runs novelty verification server-side; the mock keeps
+    // ten sequential runs inside the test timeout and fully deterministic.
+    mockFetch({ search: { html: DDG_NO_RESULTS_HTML }, dictionary: { status: 404 } });
     const key = nextKey();
     const statuses: number[] = [];
     for (let i = 0; i < 11; i++) {
@@ -250,10 +289,10 @@ describe("POST /api/words · rate limiting", () => {
 });
 
 describe("GET /api/words", () => {
-  beforeEach(() => {
-    insertWord({ slug: "a", word: "a", status: "published", published_at: "2026-01-01 00:00:00" });
-    insertWord({ slug: "b", word: "b", status: "published", published_at: "2026-02-01 00:00:00" });
-    insertWord({ slug: "c", word: "c", status: "in_review" });
+  beforeEach(async () => {
+    await insertWord({ slug: "a", word: "a", status: "published", published_at: "2026-01-01 00:00:00" });
+    await insertWord({ slug: "b", word: "b", status: "published", published_at: "2026-02-01 00:00:00" });
+    await insertWord({ slug: "c", word: "c", status: "in_review" });
   });
 
   it("lists published words only", async () => {
@@ -306,8 +345,8 @@ describe("GET /api/words", () => {
 
   it("returns only the caller's own submissions for mine=1", async () => {
     const key = nextKey();
-    insertKey(hashKey(key), 0);
-    insertWord({ slug: "mine", word: "mine", status: "in_review", contributor_key_hash: hashKey(key) });
+    await insertKey(hashKey(key), 0);
+    await insertWord({ slug: "mine", word: "mine", status: "in_review", contributor_key_hash: hashKey(key) });
 
     const body = await (await GET(get("?mine=1", { "X-Contribution-Key": key }))).json();
     expect(body.words.map((w: { slug: string }) => w.slug)).toEqual(["mine"]);
@@ -315,7 +354,7 @@ describe("GET /api/words", () => {
 
   it("returns an empty list for a key with no submissions", async () => {
     const key = nextKey();
-    insertKey(hashKey(key), 0);
+    await insertKey(hashKey(key), 0);
     const body = await (await GET(get("?mine=1", { "X-Contribution-Key": key }))).json();
     expect(body.words).toEqual([]);
   });

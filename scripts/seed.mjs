@@ -3,17 +3,16 @@
 //   - a contributor key (owns the seed words)
 //   - a reviewer key (accepted_words preset to 3 → review rights, for local testing)
 
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 const dataDir = path.join(process.cwd(), "data");
 fs.mkdirSync(dataDir, { recursive: true });
-const db = new Database(path.join(dataDir, "ai-neologism.db"));
-db.pragma("journal_mode = WAL");
+const db = createClient({ url: `file:${path.join(dataDir, "ai-neologism.db").replace(/\\/g, "/")}` });
 
-db.exec(`
+await db.executeMultiple(`
   CREATE TABLE IF NOT EXISTS words (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT UNIQUE NOT NULL,
@@ -103,8 +102,8 @@ const hash = (k) => crypto.createHash("sha256").update(k).digest("hex");
 
 const CONTRIBUTOR_KEY = "ck_seed_contributor_" + crypto.randomBytes(8).toString("hex");
 const REVIEWER_KEY = "ck_seed_reviewer_" + crypto.randomBytes(8).toString("hex");
-db.prepare("INSERT OR IGNORE INTO keys (key_hash, accepted_words) VALUES (?, 0)").run(hash(CONTRIBUTOR_KEY));
-db.prepare("INSERT OR IGNORE INTO keys (key_hash, accepted_words) VALUES (?, 3)").run(hash(REVIEWER_KEY));
+await db.execute({ sql: "INSERT OR IGNORE INTO keys (key_hash, accepted_words) VALUES (?, 0)", args: [hash(CONTRIBUTOR_KEY)] });
+await db.execute({ sql: "INSERT OR IGNORE INTO keys (key_hash, accepted_words) VALUES (?, 3)", args: [hash(REVIEWER_KEY)] });
 
 const SEED_WORDS = [
   {
@@ -261,59 +260,68 @@ const daysAgo = (n) => {
   return d.toISOString().slice(0, 19).replace("T", " ");
 };
 
-const insertWord = db.prepare(`
-  INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
-    alternatives_json, verification_json, references_json, related_words, categories_json,
-    ai_assisted, status, badge, input_type, contributor_key_hash, use_votes, work_votes,
-    published_at, created_at, updated_at)
-  VALUES (@slug, @word, @pronunciation, @part_of_speech, @definition, @explanation, @why_this_word,
-    @alternatives_json, @verification_json, @references_json, @related_words, @categories_json,
-    1, 'published', @badge, 'ai', @key_hash, @use_votes, @work_votes,
-    @published_at, @created_at, @updated_at)
-`);
+async function insertWord(w, keyHash) {
+  return db.execute({
+    sql: `INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
+      alternatives_json, verification_json, references_json, related_words, categories_json,
+      ai_assisted, status, badge, input_type, contributor_key_hash, use_votes, work_votes,
+      published_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'published', ?, 'ai', ?, ?, ?, ?, ?, ?)`,
+    args: [
+      w.slug, w.word, w.pronunciation ?? null, w.part_of_speech, w.definition, w.explanation ?? "",
+      w.why_this_word ?? "", w.alternatives_json, w.verification_json, w.references_json,
+      w.related_words, w.categories_json, w.badge, keyHash, w.use_votes, w.work_votes,
+      w.published_at, w.created_at, w.updated_at,
+    ],
+  });
+}
 
-const insertVote = db.prepare(
-  "INSERT OR IGNORE INTO votes (word_id, voter_hash, vote, created_at) VALUES (?, ?, ?, ?)"
-);
+const insertVote = (wordId, voterHash, vote, createdAt) =>
+  db.execute({
+    sql: "INSERT OR IGNORE INTO votes (word_id, voter_hash, vote, created_at) VALUES (?, ?, ?, ?)",
+    args: [wordId, voterHash, vote, createdAt],
+  });
 
 for (const w of SEED_WORDS) {
-  const exists = db.prepare("SELECT 1 FROM words WHERE slug = ?").get(w.slug);
-  if (exists) {
+  const exists = await db.execute({ sql: "SELECT 1 FROM words WHERE slug = ?", args: [w.slug] });
+  if (exists.rows.length > 0) {
     console.log(`skip ${w.slug} (already seeded)`);
     continue;
   }
   // published_at arrives as "datetime('now', '-N days')" — convert to a literal date string
   const daysBack = Number(w.published_at.match(/-(\d+) days/)?.[1] ?? 1);
-  const info = insertWord.run({
-    ...w,
-    published_at: daysAgo(daysBack),
-    created_at: daysAgo(daysBack + 2),
-    updated_at: daysAgo(daysBack - 1 < 0 ? 0 : daysBack - 1),
-    alternatives_json: JSON.stringify(w.alternatives),
-    verification_json: JSON.stringify(w.verification),
-    references_json: JSON.stringify(w.references),
-    related_words: JSON.stringify(w.related_words),
-    categories_json: JSON.stringify(w.categories),
-    key_hash: hash(CONTRIBUTOR_KEY),
-  });
-  const wordId = info.lastInsertRowid;
-  db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, 'Initial submission (seed)', '{}')").run(
-    wordId,
+  const info = await insertWord(
+    {
+      ...w,
+      published_at: daysAgo(daysBack),
+      created_at: daysAgo(daysBack + 2),
+      updated_at: daysAgo(daysBack - 1 < 0 ? 0 : daysBack - 1),
+      alternatives_json: JSON.stringify(w.alternatives),
+      verification_json: JSON.stringify(w.verification),
+      references_json: JSON.stringify(w.references),
+      related_words: JSON.stringify(w.related_words),
+      categories_json: JSON.stringify(w.categories),
+    },
     hash(CONTRIBUTOR_KEY)
   );
-  db.prepare("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, ?, 'approve', 'Seed example: evidence log complete, no prior usage found.')").run(
-    wordId,
-    hash(REVIEWER_KEY)
-  );
-  w.recent_votes.forEach((v, i) => {
-    insertVote.run(wordId, hash(`seed-voter-${w.slug}-${i}`), v, daysAgo((i % 5) + 1));
+  const wordId = Number(info.lastInsertRowid);
+  await db.execute({
+    sql: "INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, 'Initial submission (seed)', '{}')",
+    args: [wordId, hash(CONTRIBUTOR_KEY)],
   });
+  await db.execute({
+    sql: "INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, ?, 'approve', 'Seed example: evidence log complete, no prior usage found.')",
+    args: [wordId, hash(REVIEWER_KEY)],
+  });
+  for (let i = 0; i < w.recent_votes.length; i++) {
+    await insertVote(wordId, hash(`seed-voter-${w.slug}-${i}`), w.recent_votes[i], daysAgo((i % 5) + 1));
+  }
   // Votes table is the canonical count source — pad it up to the cached column totals.
   for (let i = w.recent_votes.length; i < w.use_votes; i++) {
-    insertVote.run(wordId, hash(`seed-voter-${w.slug}-use-${i}`), 1, daysAgo((i % 6) + 1));
+    await insertVote(wordId, hash(`seed-voter-${w.slug}-use-${i}`), 1, daysAgo((i % 6) + 1));
   }
   for (let i = 0; i < w.work_votes; i++) {
-    insertVote.run(wordId, hash(`seed-voter-${w.slug}-work-${i}`), -1, daysAgo((i % 6) + 1));
+    await insertVote(wordId, hash(`seed-voter-${w.slug}-work-${i}`), -1, daysAgo((i % 6) + 1));
   }
   console.log(`seeded ${w.word}`);
 }

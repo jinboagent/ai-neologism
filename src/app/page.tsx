@@ -6,11 +6,11 @@ import { alphabetWithCounts, countPublished, popularity } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const total = countPublished();
-  const letters = alphabetWithCounts();
-  const trending = popularity("trending", 6);
-  const show = trending.length > 0 ? trending : popularity("verified", 6);
+export default async function HomePage() {
+  const total = await countPublished();
+  const letters = await alphabetWithCounts();
+  const trending = await popularity("trending", 6);
+  const show = trending.length > 0 ? trending : await popularity("verified", 6);
 
   return (
     <div>

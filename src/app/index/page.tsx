@@ -7,7 +7,11 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "A–Z Index" };
 
 export default async function IndexPage() {
-  const letters = alphabetWithCounts();
+  const letters = await alphabetWithCounts();
+
+  const sections = await Promise.all(
+    letters.map(async (l) => ({ letter: l.letter, words: await listByLetter(l.letter) }))
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -35,8 +39,8 @@ export default async function IndexPage() {
             ))}
           </nav>
 
-          {letters.map((l) => {
-            const words = listByLetter(l.letter);
+          {sections.map((l) => {
+            const words = l.words;
             return (
               <section key={l.letter} id={`letter-${l.letter}`} className="mt-10 scroll-mt-20">
                 <h2 className="word-title text-2xl font-bold text-primary">{l.letter}</h2>

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { POST } from "@/app/api/words/[slug]/vote/route";
 import { getDb } from "@/lib/db";
-import { fetchWordRow, insertWord, resetDb } from "../helpers/db";
+import { fetchWordRow, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 
-beforeEach(() => {
-  resetDb();
-  insertWord({ slug: "pub", word: "pub", status: "published" });
+beforeEach(async () => {
+  await resetDb();
+  await insertWord({ slug: "pub", word: "pub", status: "published" });
 });
 
 let ipSeq = 0;
@@ -39,14 +39,14 @@ describe("POST /api/words/[slug]/vote · accepted votes", () => {
 
   it("persists the totals onto the word", async () => {
     await send({ vote: 1 });
-    expect(fetchWordRow("pub")).toMatchObject({ use_votes: 1, work_votes: 0 });
+    expect((await fetchWordRow("pub"))).toMatchObject({ use_votes: 1, work_votes: 0 });
   });
 
   it("tallies distinct voters", async () => {
     await send({ vote: 1 });
     await send({ vote: 1 });
     await send({ vote: -1 });
-    expect(fetchWordRow("pub")).toMatchObject({ use_votes: 2, work_votes: 1 });
+    expect((await fetchWordRow("pub"))).toMatchObject({ use_votes: 2, work_votes: 1 });
   });
 
   it("withdraws a repeated vote from the same voter", async () => {
@@ -57,12 +57,12 @@ describe("POST /api/words/[slug]/vote · accepted votes", () => {
   });
 
   it("counts the same voter twice for different words", async () => {
-    insertWord({ slug: "other", word: "other", status: "published" });
+    await insertWord({ slug: "other", word: "other", status: "published" });
     const headers = voter();
     await send({ vote: 1 }, headers, "pub");
     await send({ vote: 1 }, headers, "other");
-    expect(fetchWordRow("pub")?.use_votes).toBe(1);
-    expect(fetchWordRow("other")?.use_votes).toBe(1);
+    expect((await fetchWordRow("pub"))?.use_votes).toBe(1);
+    expect((await fetchWordRow("other"))?.use_votes).toBe(1);
   });
 });
 
@@ -95,11 +95,11 @@ describe("POST /api/words/[slug]/vote · rejected votes", () => {
   it("does not write a row for a rejected vote", async () => {
     await send({ vote: 0 });
     await send({ vote: [1] });
-    expect((getDb().prepare("SELECT COUNT(*) AS n FROM votes").get() as { n: number }).n).toBe(0);
+    expect(((await rawGet("SELECT COUNT(*) AS n FROM votes")) as { n: number }).n).toBe(0);
   });
 
   it("returns 404 for a word that is not published", async () => {
-    insertWord({ slug: "queue", word: "queue", status: "in_review" });
+    await insertWord({ slug: "queue", word: "queue", status: "in_review" });
     const res = await send({ vote: 1 }, voter(), "queue");
     expect(res.status).toBe(404);
     expect((await res.json()).error).toBe("NOT_FOUND");
@@ -114,7 +114,7 @@ describe("POST /api/words/[slug]/vote · rejected votes", () => {
 describe("POST /api/words/[slug]/vote · rate limiting", () => {
   it("allows twenty votes per minute per fingerprint, then returns 429", async () => {
     const headers = voter();
-    insertWord({ slug: "b", word: "b", status: "published" });
+    await insertWord({ slug: "b", word: "b", status: "published" });
 
     const statuses: number[] = [];
     for (let i = 0; i < 21; i++) {
@@ -135,10 +135,10 @@ describe("POST /api/words/[slug]/vote · rate limiting", () => {
   it("does not record a vote once the rate limit is hit", async () => {
     const headers = voter();
     for (let i = 0; i < 20; i++) await send({ vote: i % 2 === 0 ? 1 : -1 }, headers);
-    const before = fetchWordRow("pub");
+    const before = await fetchWordRow("pub");
 
     const res = await send({ vote: 1 }, headers);
     expect(res.status).toBe(429);
-    expect(fetchWordRow("pub")).toMatchObject({ use_votes: before?.use_votes, work_votes: before?.work_votes });
+    expect((await fetchWordRow("pub"))).toMatchObject({ use_votes: before?.use_votes, work_votes: before?.work_votes });
   });
 });

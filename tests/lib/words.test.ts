@@ -14,44 +14,44 @@ import {
   uniqueSlug,
   type WordRow,
 } from "@/lib/words";
-import { insertKey, insertVote, insertWord, resetDb } from "../helpers/db";
+import { insertKey, insertVote, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 
-beforeEach(() => {
-  resetDb();
+beforeEach(async () => {
+  await resetDb();
 });
 
 describe("slugify", () => {
-  it("lowercases and trims", () => {
+  it("lowercases and trims", async () => {
     expect(slugify("  Graywashing  ")).toBe("graywashing");
   });
 
-  it("converts spaces and underscores to single hyphens", () => {
+  it("converts spaces and underscores to single hyphens", async () => {
     expect(slugify("ping dread")).toBe("ping-dread");
     expect(slugify("micro_legacy")).toBe("micro-legacy");
     expect(slugify("a   b")).toBe("a-b");
     expect(slugify("a-_b")).toBe("a-b");
   });
 
-  it("never merges separate words joined by an underscore", () => {
+  it("never merges separate words joined by an underscore", async () => {
     // Regression: "_" used to be deleted before it could become a hyphen,
     // collapsing "micro_legacy" to "microlegacy".
     expect(slugify("micro_legacy")).not.toBe("microlegacy");
-    expect(uniqueSlug("micro_legacy")).toBe("micro-legacy");
+    expect(await uniqueSlug("micro_legacy")).toBe("micro-legacy");
   });
 
-  it("strips punctuation and collapses repeated hyphens", () => {
+  it("strips punctuation and collapses repeated hyphens", async () => {
     expect(slugify("Hello, World!")).toBe("hello-world");
     expect(slugify("--dashes--")).toBe("dashes");
     expect(slugify("a---b")).toBe("a-b");
   });
 
-  it("returns an empty string when nothing survives sanitisation", () => {
+  it("returns an empty string when nothing survives sanitisation", async () => {
     expect(slugify("")).toBe("");
     expect(slugify("!!!")).toBe("");
     expect(slugify("   ")).toBe("");
   });
 
-  it("drops non-ASCII characters rather than transliterating them", () => {
+  it("drops non-ASCII characters rather than transliterating them", async () => {
     // Documents current behaviour: accented input loses the accented letters.
     expect(slugify("café")).toBe("caf");
     expect(slugify("新词")).toBe("");
@@ -59,21 +59,21 @@ describe("slugify", () => {
 });
 
 describe("uniqueSlug", () => {
-  it("returns the plain slug when it is free", () => {
-    expect(uniqueSlug("Graywashing")).toBe("graywashing");
+  it("returns the plain slug when it is free", async () => {
+    expect(await uniqueSlug("Graywashing")).toBe("graywashing");
   });
 
-  it("appends an incrementing suffix on collision", () => {
-    insertWord({ slug: "pingdread", word: "pingdread" });
-    expect(uniqueSlug("pingdread")).toBe("pingdread-2");
-    insertWord({ slug: "pingdread-2", word: "pingdread two" });
-    expect(uniqueSlug("pingdread")).toBe("pingdread-3");
+  it("appends an incrementing suffix on collision", async () => {
+    await insertWord({ slug: "pingdread", word: "pingdread" });
+    expect(await uniqueSlug("pingdread")).toBe("pingdread-2");
+    await insertWord({ slug: "pingdread-2", word: "pingdread two" });
+    expect(await uniqueSlug("pingdread")).toBe("pingdread-3");
   });
 
-  it("falls back to 'word' when the input slugifies to nothing", () => {
-    expect(uniqueSlug("!!!")).toBe("word");
-    insertWord({ slug: "word", word: "!!!" });
-    expect(uniqueSlug("!!!")).toBe("word-2");
+  it("falls back to 'word' when the input slugifies to nothing", async () => {
+    expect(await uniqueSlug("!!!")).toBe("word");
+    await insertWord({ slug: "word", word: "!!!" });
+    expect(await uniqueSlug("!!!")).toBe("word-2");
   });
 });
 
@@ -106,7 +106,7 @@ describe("hydrate", () => {
       updated_at: "2026-09-01 00:00:00",
     }) as WordRow;
 
-  it("parses JSON columns into typed fields", () => {
+  it("parses JSON columns into typed fields", async () => {
     const row = baseRow();
     row.alternatives_json = JSON.stringify([{ word: "alt", rationale: "why" }]);
     row.categories_json = JSON.stringify(["Health"]);
@@ -120,12 +120,12 @@ describe("hydrate", () => {
     expect(w.verification).toEqual({ verdict: "NEW" });
   });
 
-  it("converts ai_assisted from 0/1 to a boolean", () => {
+  it("converts ai_assisted from 0/1 to a boolean", async () => {
     expect(hydrate(baseRow()).ai_assisted).toBe(false);
     expect(hydrate({ ...baseRow(), ai_assisted: 1 }).ai_assisted).toBe(true);
   });
 
-  it("survives corrupt JSON in every column without throwing", () => {
+  it("survives corrupt JSON in every column without throwing", async () => {
     const row = baseRow();
     row.alternatives_json = "{not json";
     row.verification_json = "][";
@@ -143,24 +143,24 @@ describe("hydrate", () => {
 });
 
 describe("listPublished / countPublished", () => {
-  it("returns only published words", () => {
-    insertWord({ slug: "a", word: "a", status: "published" });
-    insertWord({ slug: "b", word: "b", status: "in_review" });
-    insertWord({ slug: "c", word: "c", status: "declined" });
-    insertWord({ slug: "d", word: "d", status: "returned" });
+  it("returns only published words", async () => {
+    await insertWord({ slug: "a", word: "a", status: "published" });
+    await insertWord({ slug: "b", word: "b", status: "in_review" });
+    await insertWord({ slug: "c", word: "c", status: "declined" });
+    await insertWord({ slug: "d", word: "d", status: "returned" });
 
-    expect(countPublished()).toBe(1);
-    expect(listPublished().map((w) => w.slug)).toEqual(["a"]);
+    expect(await countPublished()).toBe(1);
+    expect((await listPublished()).map((w) => w.slug)).toEqual(["a"]);
   });
 
-  it("orders newest-published first and honours limit/offset", () => {
-    insertWord({ slug: "old", word: "old", status: "published", published_at: "2026-01-01 00:00:00" });
-    insertWord({ slug: "mid", word: "mid", status: "published", published_at: "2026-05-01 00:00:00" });
-    insertWord({ slug: "new", word: "new", status: "published", published_at: "2026-09-01 00:00:00" });
+  it("orders newest-published first and honours limit/offset", async () => {
+    await insertWord({ slug: "old", word: "old", status: "published", published_at: "2026-01-01 00:00:00" });
+    await insertWord({ slug: "mid", word: "mid", status: "published", published_at: "2026-05-01 00:00:00" });
+    await insertWord({ slug: "new", word: "new", status: "published", published_at: "2026-09-01 00:00:00" });
 
-    expect(listPublished().map((w) => w.slug)).toEqual(["new", "mid", "old"]);
-    expect(listPublished({ limit: 2 }).map((w) => w.slug)).toEqual(["new", "mid"]);
-    expect(listPublished({ limit: 2, offset: 2 }).map((w) => w.slug)).toEqual(["old"]);
+    expect((await listPublished()).map((w) => w.slug)).toEqual(["new", "mid", "old"]);
+    expect((await listPublished({ limit: 2 })).map((w) => w.slug)).toEqual(["new", "mid"]);
+    expect((await listPublished({ limit: 2, offset: 2 })).map((w) => w.slug)).toEqual(["old"]);
   });
 });
 
@@ -169,60 +169,60 @@ describe("getWord visibility", () => {
   const REVIEWER = "hash-reviewer";
   const STRANGER = "hash-stranger";
 
-  beforeEach(() => {
-    insertKey(REVIEWER, 3); // meets REVIEW_THRESHOLD
-    insertKey(STRANGER, 0);
-    insertWord({ slug: "pub", word: "pub", status: "published" });
-    insertWord({ slug: "queue", word: "queue", status: "in_review", contributor_key_hash: OWNER });
+  beforeEach(async () => {
+    await insertKey(REVIEWER, 3); // meets REVIEW_THRESHOLD
+    await insertKey(STRANGER, 0);
+    await insertWord({ slug: "pub", word: "pub", status: "published" });
+    await insertWord({ slug: "queue", word: "queue", status: "in_review", contributor_key_hash: OWNER });
   });
 
-  it("shows published words to anonymous callers", () => {
-    expect(getWord("pub")?.slug).toBe("pub");
-    expect(getWord("pub", null)?.slug).toBe("pub");
+  it("shows published words to anonymous callers", async () => {
+    expect((await getWord("pub"))?.slug).toBe("pub");
+    expect((await getWord("pub", null))?.slug).toBe("pub");
   });
 
-  it("hides unpublished words from anonymous callers", () => {
-    expect(getWord("queue")).toBeNull();
-    expect(getWord("queue", null)).toBeNull();
+  it("hides unpublished words from anonymous callers", async () => {
+    expect(await getWord("queue")).toBeNull();
+    expect(await getWord("queue", null)).toBeNull();
   });
 
-  it("shows unpublished words to their contributor", () => {
-    expect(getWord("queue", OWNER)?.slug).toBe("queue");
+  it("shows unpublished words to their contributor", async () => {
+    expect((await getWord("queue", OWNER))?.slug).toBe("queue");
   });
 
-  it("shows unpublished words to a reviewer who has met the threshold", () => {
-    expect(getWord("queue", REVIEWER)?.slug).toBe("queue");
+  it("shows unpublished words to a reviewer who has met the threshold", async () => {
+    expect((await getWord("queue", REVIEWER))?.slug).toBe("queue");
   });
 
-  it("hides unpublished words from a key holder below the review threshold", () => {
-    expect(getWord("queue", STRANGER)).toBeNull();
+  it("hides unpublished words from a key holder below the review threshold", async () => {
+    expect(await getWord("queue", STRANGER)).toBeNull();
   });
 
-  it("returns null for an unknown slug", () => {
-    expect(getWord("nope", OWNER)).toBeNull();
+  it("returns null for an unknown slug", async () => {
+    expect(await getWord("nope", OWNER)).toBeNull();
   });
 });
 
 describe("listByLetter / alphabetWithCounts", () => {
-  beforeEach(() => {
-    insertWord({ slug: "apple", word: "apple", status: "published" });
-    insertWord({ slug: "avocado", word: "Avocado", status: "published" });
-    insertWord({ slug: "banana", word: "banana", status: "published" });
-    insertWord({ slug: "pending", word: "apricot", status: "in_review" });
-    insertWord({ slug: "numeric", word: "4chanism", status: "published" });
+  beforeEach(async () => {
+    await insertWord({ slug: "apple", word: "apple", status: "published" });
+    await insertWord({ slug: "avocado", word: "Avocado", status: "published" });
+    await insertWord({ slug: "banana", word: "banana", status: "published" });
+    await insertWord({ slug: "pending", word: "apricot", status: "in_review" });
+    await insertWord({ slug: "numeric", word: "4chanism", status: "published" });
   });
 
-  it("matches case-insensitively and excludes unpublished words", () => {
-    expect(listByLetter("A").map((w) => w.word)).toEqual(["apple", "Avocado"]);
-    expect(listByLetter("a").map((w) => w.word)).toEqual(["apple", "Avocado"]);
+  it("matches case-insensitively and excludes unpublished words", async () => {
+    expect((await listByLetter("A")).map((w) => w.word)).toEqual(["apple", "Avocado"]);
+    expect((await listByLetter("a")).map((w) => w.word)).toEqual(["apple", "Avocado"]);
   });
 
-  it("returns an empty list for a letter with no published words", () => {
-    expect(listByLetter("Z")).toEqual([]);
+  it("returns an empty list for a letter with no published words", async () => {
+    expect(await listByLetter("Z")).toEqual([]);
   });
 
-  it("counts published words per letter and drops non A-Z initials", () => {
-    expect(alphabetWithCounts()).toEqual([
+  it("counts published words per letter and drops non A-Z initials", async () => {
+    expect(await alphabetWithCounts()).toEqual([
       { letter: "A", count: 2 },
       { letter: "B", count: 1 },
     ]);
@@ -230,42 +230,42 @@ describe("listByLetter / alphabetWithCounts", () => {
 });
 
 describe("searchWords", () => {
-  beforeEach(() => {
-    insertWord({
+  beforeEach(async () => {
+    await insertWord({
       slug: "graywashing",
       word: "graywashing",
       status: "published",
       definition: "Performing superficial philanthropy to mask a harmful record.",
     });
-    insertWord({
+    await insertWord({
       slug: "pingdread",
       word: "pingdread",
       status: "published",
       definition: "Anxiety about opening a notification that carries a request.",
     });
-    insertWord({ slug: "hidden", word: "hiddencoin", status: "in_review", definition: "philanthropy" });
+    await insertWord({ slug: "hidden", word: "hiddencoin", status: "in_review", definition: "philanthropy" });
   });
 
-  it("matches on the word itself", () => {
-    expect(searchWords("graywashing").map((w) => w.slug)).toEqual(["graywashing"]);
+  it("matches on the word itself", async () => {
+    expect((await searchWords("graywashing")).map((w) => w.slug)).toEqual(["graywashing"]);
   });
 
-  it("matches on definition text", () => {
-    expect(searchWords("philanthropy").map((w) => w.slug)).toEqual(["graywashing"]);
+  it("matches on definition text", async () => {
+    expect((await searchWords("philanthropy")).map((w) => w.slug)).toEqual(["graywashing"]);
   });
 
-  it("never returns unpublished words", () => {
-    expect(searchWords("hiddencoin")).toEqual([]);
+  it("never returns unpublished words", async () => {
+    expect(await searchWords("hiddencoin")).toEqual([]);
   });
 
-  it("returns an empty list for blank or fully-stripped queries", () => {
-    expect(searchWords("")).toEqual([]);
-    expect(searchWords("   ")).toEqual([]);
-    expect(searchWords("\"\"")).toEqual([]);
-    expect(searchWords("*()")).toEqual([]);
+  it("returns an empty list for blank or fully-stripped queries", async () => {
+    expect(await searchWords("")).toEqual([]);
+    expect(await searchWords("   ")).toEqual([]);
+    expect(await searchWords("\"\"")).toEqual([]);
+    expect(await searchWords("*()")).toEqual([]);
   });
 
-  it("does not throw on FTS operator injection attempts", () => {
+  it("does not throw on FTS operator injection attempts", async () => {
     const attacks = [
       '" OR word:*',
       'graywashing" AND "pingdread',
@@ -279,18 +279,24 @@ describe("searchWords", () => {
       "_",
     ];
     for (const q of attacks) {
-      expect(() => searchWords(q), `query: ${q}`).not.toThrow();
+      let threw = false;
+      try {
+        await searchWords(q);
+      } catch {
+        threw = true;
+      }
+      expect(threw, `query: ${q}`).toBe(false);
     }
   });
 
-  it("honours the limit argument", () => {
-    expect(searchWords("a", 1).length).toBeLessThanOrEqual(1);
+  it("honours the limit argument", async () => {
+    expect((await searchWords("a", 1)).length).toBeLessThanOrEqual(1);
   });
 });
 
 describe("popularity lenses", () => {
-  beforeEach(() => {
-    insertWord({
+  beforeEach(async () => {
+    await insertWord({
       slug: "hot",
       word: "hot",
       status: "published",
@@ -298,7 +304,7 @@ describe("popularity lenses", () => {
       work_votes: 4,
       published_at: "2026-09-01 00:00:00",
     });
-    insertWord({
+    await insertWord({
       slug: "loved",
       word: "loved",
       status: "published",
@@ -306,7 +312,7 @@ describe("popularity lenses", () => {
       work_votes: 0,
       published_at: "2026-08-01 00:00:00",
     });
-    insertWord({
+    await insertWord({
       slug: "quiet",
       word: "quiet",
       status: "published",
@@ -314,110 +320,106 @@ describe("popularity lenses", () => {
       work_votes: 0,
       published_at: "2026-09-03 00:00:00",
     });
-    insertWord({ slug: "draft", word: "draft", status: "in_review", use_votes: 99 });
+    await insertWord({ slug: "draft", word: "draft", status: "in_review", use_votes: 99 });
   });
 
-  it("endorsed ranks by use_votes and excludes words with none", () => {
-    expect(popularity("endorsed").map((w) => w.slug)).toEqual(["loved", "hot"]);
+  it("endorsed ranks by use_votes and excludes words with none", async () => {
+    expect((await popularity("endorsed")).map((w) => w.slug)).toEqual(["loved", "hot"]);
   });
 
-  it("contested requires both vote types and ranks by their product", () => {
-    expect(popularity("contested").map((w) => w.slug)).toEqual(["hot"]);
+  it("contested requires both vote types and ranks by their product", async () => {
+    expect((await popularity("contested")).map((w) => w.slug)).toEqual(["hot"]);
   });
 
-  it("verified orders by publication date, newest first", () => {
-    expect(popularity("verified").map((w) => w.slug)).toEqual(["quiet", "hot", "loved"]);
+  it("verified orders by publication date, newest first", async () => {
+    expect((await popularity("verified")).map((w) => w.slug)).toEqual(["quiet", "hot", "loved"]);
   });
 
-  it("trending ranks by votes cast in the last seven days", () => {
-    const hotId = getDb().prepare("SELECT id FROM words WHERE slug = 'hot'").get() as { id: number };
-    const quietId = getDb().prepare("SELECT id FROM words WHERE slug = 'quiet'").get() as { id: number };
-    insertVote(hotId.id, "v1", 1);
-    insertVote(hotId.id, "v2", 1);
-    insertVote(quietId.id, "v3", -1);
+  it("trending ranks by votes cast in the last seven days", async () => {
+    const hotId = (await rawGet("SELECT id FROM words WHERE slug = 'hot'")) as { id: number };
+    const quietId = (await rawGet("SELECT id FROM words WHERE slug = 'quiet'")) as { id: number };
+    await insertVote(hotId.id, "v1", 1);
+    await insertVote(hotId.id, "v2", 1);
+    await insertVote(quietId.id, "v3", -1);
 
     // hot=+2, loved=0 (no recent votes), quiet=-1 — a downvote ranks below silence.
-    expect(popularity("trending").map((w) => w.slug)).toEqual(["hot", "loved", "quiet"]);
+    expect((await popularity("trending")).map((w) => w.slug)).toEqual(["hot", "loved", "quiet"]);
   });
 
-  it("trending ignores votes older than seven days", () => {
-    const lovedId = getDb().prepare("SELECT id FROM words WHERE slug = 'loved'").get() as { id: number };
-    insertVote(lovedId.id, "old-voter", 1, "2020-01-01 00:00:00");
+  it("trending ignores votes older than seven days", async () => {
+    const lovedId = (await rawGet("SELECT id FROM words WHERE slug = 'loved'")) as { id: number };
+    await insertVote(lovedId.id, "old-voter", 1, "2020-01-01 00:00:00");
 
-    expect(popularity("trending").map((w) => w.slug)).toEqual(["quiet", "hot", "loved"]);
+    expect((await popularity("trending")).map((w) => w.slug)).toEqual(["quiet", "hot", "loved"]);
   });
 
-  it("never returns unpublished words from any lens", () => {
+  it("never returns unpublished words from any lens", async () => {
     for (const lens of ["trending", "endorsed", "contested", "verified"] as const) {
-      expect(popularity(lens).map((w) => w.slug)).not.toContain("draft");
+      expect((await popularity(lens)).map((w) => w.slug)).not.toContain("draft");
     }
   });
 
-  it("honours the limit argument", () => {
-    expect(popularity("verified", 2)).toHaveLength(2);
+  it("honours the limit argument", async () => {
+    expect(await popularity("verified", 2)).toHaveLength(2);
   });
 });
 
 describe("recordVote", () => {
   let slug: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     slug = "votable";
-    insertWord({ slug, word: slug, status: "published" });
+    await insertWord({ slug, word: slug, status: "published" });
   });
 
-  it("rejects a vote on a word that is not published", () => {
-    insertWord({ slug: "pending", word: "pending", status: "in_review" });
-    expect(recordVote("pending", "voter", 1)).toEqual({ ok: false, use_votes: 0, work_votes: 0 });
+  it("rejects a vote on a word that is not published", async () => {
+    await insertWord({ slug: "pending", word: "pending", status: "in_review" });
+    expect(await recordVote("pending", "voter", 1)).toEqual({ ok: false, use_votes: 0, work_votes: 0 });
   });
 
-  it("rejects a vote on an unknown slug", () => {
-    expect(recordVote("nope", "voter", 1).ok).toBe(false);
+  it("rejects a vote on an unknown slug", async () => {
+    expect((await recordVote("nope", "voter", 1)).ok).toBe(false);
   });
 
-  it("records a first upvote", () => {
-    expect(recordVote(slug, "voter", 1)).toEqual({ ok: true, use_votes: 1, work_votes: 0 });
+  it("records a first upvote", async () => {
+    expect(await recordVote(slug, "voter", 1)).toEqual({ ok: true, use_votes: 1, work_votes: 0 });
   });
 
-  it("withdraws the vote when the same voter repeats it", () => {
-    recordVote(slug, "voter", 1);
-    expect(recordVote(slug, "voter", 1)).toEqual({ ok: true, use_votes: 0, work_votes: 0 });
+  it("withdraws the vote when the same voter repeats it", async () => {
+    await recordVote(slug, "voter", 1);
+    expect(await recordVote(slug, "voter", 1)).toEqual({ ok: true, use_votes: 0, work_votes: 0 });
   });
 
-  it("switches an existing vote instead of double-counting", () => {
-    recordVote(slug, "voter", 1);
-    expect(recordVote(slug, "voter", -1)).toEqual({ ok: true, use_votes: 0, work_votes: 1 });
+  it("switches an existing vote instead of double-counting", async () => {
+    await recordVote(slug, "voter", 1);
+    expect(await recordVote(slug, "voter", -1)).toEqual({ ok: true, use_votes: 0, work_votes: 1 });
   });
 
-  it("counts distinct voters, not raw vote events", () => {
-    recordVote(slug, "a", 1);
-    recordVote(slug, "b", 1);
-    recordVote(slug, "c", -1);
-    const row = getDb()
-      .prepare("SELECT use_votes, work_votes FROM words WHERE slug = ?")
-      .get(slug) as { use_votes: number; work_votes: number };
+  it("counts distinct voters, not raw vote events", async () => {
+    await recordVote(slug, "a", 1);
+    await recordVote(slug, "b", 1);
+    await recordVote(slug, "c", -1);
+    const row = (await rawGet("SELECT use_votes, work_votes FROM words WHERE slug = ?", [slug])) as { use_votes: number; work_votes: number };
     expect(row).toEqual({ use_votes: 2, work_votes: 1 });
   });
 
-  it("persists the cached counts onto the words row", () => {
-    recordVote(slug, "a", 1);
-    recordVote(slug, "b", -1);
-    const row = getDb()
-      .prepare("SELECT use_votes, work_votes FROM words WHERE slug = ?")
-      .get(slug) as { use_votes: number; work_votes: number };
+  it("persists the cached counts onto the words row", async () => {
+    await recordVote(slug, "a", 1);
+    await recordVote(slug, "b", -1);
+    const row = (await rawGet("SELECT use_votes, work_votes FROM words WHERE slug = ?", [slug])) as { use_votes: number; work_votes: number };
     expect(row).toEqual({ use_votes: 1, work_votes: 1 });
   });
 
-  it("keeps at most one votes row per voter", () => {
-    recordVote(slug, "a", 1);
-    recordVote(slug, "a", -1); // switches the existing row rather than inserting a second
-    expect(voteRowCount()).toBe(1);
+  it("keeps at most one votes row per voter", async () => {
+    await recordVote(slug, "a", 1);
+    await recordVote(slug, "a", -1); // switches the existing row rather than inserting a second
+    expect(await voteRowCount()).toBe(1);
 
-    recordVote(slug, "a", -1); // repeating the same vote toggles it off
-    expect(voteRowCount()).toBe(0);
+    await recordVote(slug, "a", -1); // repeating the same vote toggles it off
+    expect(await voteRowCount()).toBe(0);
   });
 });
 
-function voteRowCount(): number {
-  return (getDb().prepare("SELECT COUNT(*) AS n FROM votes").get() as { n: number }).n;
+async function voteRowCount(): Promise<number> {
+  return ((await rawGet("SELECT COUNT(*) AS n FROM votes")) as { n: number }).n;
 }

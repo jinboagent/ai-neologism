@@ -1,6 +1,7 @@
 // Pluggable AI adapter — any OpenAI-compatible chat-completions endpoint works
 // (set AI_BASE_URL / AI_API_KEY / AI_MODEL in .env.local).
 
+import dns from "node:dns/promises";
 import { CATEGORIES } from "./categories";
 
 export type Candidate = {
@@ -148,6 +149,24 @@ function assertSafeTarget(candidate: URL): void {
   if (isBlockedHost(candidate.hostname)) throw new Error("BAD_URL");
 }
 
+/**
+ * Resolve the hostname and block if ANY resolved address is private/loopback
+ * (finding #5: a hostname like `127.0.0.1.nip.io` passes the string check but
+ * resolves to a forbidden IP). This narrows — without fully closing — the DNS
+ * rebinding window between this lookup and the connection itself.
+ */
+async function assertResolvedSafe(candidate: URL): Promise<void> {
+  let addresses: { address: string }[];
+  try {
+    addresses = await dns.lookup(candidate.hostname, { all: true });
+  } catch {
+    throw new Error("BAD_URL"); // unresolvable host — nothing to fetch
+  }
+  for (const a of addresses) {
+    if (isBlockedHost(a.address)) throw new Error("BAD_URL");
+  }
+}
+
 /** Validate a user-supplied link at ingestion time (e.g. when storing a seed),
  * long before anything ever fetches it. Throws BAD_URL; returns the parsed URL. */
 export function validatePublicUrl(raw: string): URL {
@@ -170,6 +189,7 @@ export async function fetchUrlContent(url: string): Promise<string> {
     throw new Error("BAD_URL");
   }
   assertSafeTarget(target);
+  await assertResolvedSafe(target);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);

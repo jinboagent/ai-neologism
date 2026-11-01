@@ -10,7 +10,7 @@ export const metadata = { title: "Search" };
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   const query = (q ?? "").trim();
-  const results = query ? searchWords(query, 30) : [];
+  const results = query ? await searchWords(query, 30) : [];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">

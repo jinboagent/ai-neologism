@@ -1,6 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockFetch } from "../helpers/fetch";
 
+// Node's DNS resolver is stubbed so the test hostnames (*.example) resolve with
+// no network access and the redirect-guard tests exercise the actual guard
+// rather than failing at lookup. Hosts under .private.example resolve to a
+// loopback address, covering the DNS pre-resolution defence (finding #5).
+vi.mock("node:dns/promises", () => ({
+  default: {
+    lookup: async (host: string) =>
+      host.endsWith(".private.example")
+        ? [{ address: "127.0.0.1", family: 4 }]
+        : [{ address: "93.184.216.34", family: 4 }],
+  },
+}));
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -282,6 +295,14 @@ describe("fetchUrlContent · protocol and host guards", () => {
       await expect(fetchUrlContent(url)).resolves.toBeTruthy();
     }
   );
+
+  it("blocks a public-looking hostname whose DNS resolves to a private address", async () => {
+    // DNS rebinding shape: the string check passes, the resolved address does not.
+    const { calls } = ok();
+    const { fetchUrlContent } = await loadAi({});
+    await expect(fetchUrlContent("http://rebind.private.example/")).rejects.toThrow("BAD_URL");
+    expect(calls).toHaveLength(0);
+  });
 
   it("allows an ordinary public HTTPS URL", async () => {
     ok();

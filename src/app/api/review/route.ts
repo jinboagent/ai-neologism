@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { qAll, qGet, withTx } from "@/lib/db";
 import { canReview, resolveKeyHash } from "@/lib/keys";
 import { hydrate, toPublic, type WordRow } from "@/lib/words";
 
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 async function requireReviewer(req: Request): Promise<string | null> {
   const keyHash = await resolveKeyHash(req);
-  if (!keyHash || !canReview(keyHash)) return null;
+  if (!keyHash || !await canReview(keyHash)) return null;
   return keyHash;
 }
 
@@ -21,11 +21,9 @@ export async function GET(req: Request) {
   }
   // Community reviewers never see API submissions — those are gated by the admin
   // alone (input_type 'api' is set server-side at submission).
-  const rows = getDb()
-    .prepare(
-      "SELECT * FROM words WHERE status = 'in_review' AND (input_type IS NULL OR input_type != 'api') ORDER BY created_at ASC"
-    )
-    .all() as WordRow[];
+  const rows = await qAll<WordRow>(
+    "SELECT * FROM words WHERE status = 'in_review' AND (input_type IS NULL OR input_type != 'api') ORDER BY created_at ASC"
+  );
   // A reviewer cannot review their own submissions; strip the internal key hash
   // before anything leaves the server.
   const queue = rows
@@ -55,38 +53,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_ACTION" }, { status: 400 });
   }
 
-  const db = getDb();
   // Same channel exclusion as the queue: API submissions are decided by the admin
   // alone — knowing the slug must not let a community reviewer approve them.
-  const word = db
-    .prepare(
-      "SELECT * FROM words WHERE slug = ? AND status = 'in_review' AND (input_type IS NULL OR input_type != 'api')"
-    )
-    .get(slug) as WordRow | undefined;
+  const word = await qGet<WordRow>(
+    "SELECT * FROM words WHERE slug = ? AND status = 'in_review' AND (input_type IS NULL OR input_type != 'api')",
+    [slug]
+  );
   if (!word) return NextResponse.json({ error: "NOT_FOUND", message: "Word not found or not in review." }, { status: 404 });
   if (word.contributor_key_hash === reviewer) {
     return NextResponse.json({ error: "SELF_REVIEW", message: "You cannot review your own submission." }, { status: 403 });
   }
 
-  const tx = db.transaction(() => {
-    db.prepare("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, ?, ?, ?)").run(
+  await withTx(async (tx) => {
+    await tx.execute("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, ?, ?, ?)", [
       word.id,
       reviewer,
       action,
-      cleanReason
-    );
+      cleanReason,
+    ]);
     if (action === "approve") {
-      db.prepare("UPDATE words SET status='published', published_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(word.id);
+      await tx.execute("UPDATE words SET status='published', published_at=datetime('now'), updated_at=datetime('now') WHERE id=?", [word.id]);
       if (word.contributor_key_hash) {
-        db.prepare("UPDATE keys SET accepted_words = accepted_words + 1 WHERE key_hash = ?").run(word.contributor_key_hash);
+        await tx.execute("UPDATE keys SET accepted_words = accepted_words + 1 WHERE key_hash = ?", [word.contributor_key_hash]);
       }
     } else if (action === "request_changes") {
-      db.prepare("UPDATE words SET status='returned', return_notes=?, updated_at=datetime('now') WHERE id=?").run(cleanReason, word.id);
+      await tx.execute("UPDATE words SET status='returned', return_notes=?, updated_at=datetime('now') WHERE id=?", [cleanReason, word.id]);
     } else {
-      db.prepare("UPDATE words SET status='declined', return_notes=?, updated_at=datetime('now') WHERE id=?").run(cleanReason, word.id);
+      await tx.execute("UPDATE words SET status='declined', return_notes=?, updated_at=datetime('now') WHERE id=?", [cleanReason, word.id]);
     }
   });
-  tx();
 
   return NextResponse.json({
     slug,

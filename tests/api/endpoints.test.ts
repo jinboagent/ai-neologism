@@ -6,18 +6,23 @@ import * as verifyRoute from "@/app/api/coin/verify/route";
 import * as candidatesRoute from "@/app/api/coin/candidates/route";
 import { getDb } from "@/lib/db";
 import { hashKey } from "@/lib/keys";
-import { insertKey, insertWord, resetDb } from "../helpers/db";
+import { insertKey, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 import { DDG_NO_RESULTS_HTML, ddgHtml, dictionaryPayload, mockFetch } from "../helpers/fetch";
 
-beforeEach(() => {
-  resetDb();
+beforeEach(async () => {
+  await resetDb();
   vi.unstubAllGlobals();
+  // The rotating XFF in headers() only shapes the fingerprint when a proxy is
+  // trusted — without it every caller shares the "local" identity and the
+  // per-fingerprint rate-limit tests deplete each other's budgets.
+  vi.stubEnv("TRUST_PROXY", "true");
 });
 
 afterEach(() => {
   delete process.env.AI_API_KEY;
   delete process.env.SEARCH_PROVIDER;
   delete process.env.TAVILY_API_KEY;
+  vi.unstubAllEnvs();
 });
 
 let ipSeq = 0;
@@ -52,7 +57,7 @@ describe("GET /api/key", () => {
 
   it("reports standing for an issued key", async () => {
     const key = "ck_issued_key_value";
-    insertKey(hashKey(key), 2);
+    await insertKey(hashKey(key), 2);
 
     const body = await (
       await keyRoute.GET(jsonRequest("http://localhost/api/key", undefined, { "X-Contribution-Key": key }))
@@ -62,7 +67,7 @@ describe("GET /api/key", () => {
 
   it("grants review rights at the threshold", async () => {
     const key = "ck_reviewer_key";
-    insertKey(hashKey(key), 3);
+    await insertKey(hashKey(key), 3);
 
     const body = await (
       await keyRoute.GET(jsonRequest("http://localhost/api/key", undefined, { "X-Contribution-Key": key }))
@@ -95,7 +100,7 @@ describe("POST /api/key", () => {
 
   it("never stores the plaintext key", async () => {
     const { key } = await (await keyRoute.POST()).json();
-    const rows = getDb().prepare("SELECT * FROM keys").all();
+    const rows = (await rawAll("SELECT * FROM keys"));
     expect(JSON.stringify(rows)).not.toContain(key);
   });
 
@@ -107,14 +112,14 @@ describe("POST /api/key", () => {
 });
 
 describe("GET /api/search", () => {
-  beforeEach(() => {
-    insertWord({
+  beforeEach(async () => {
+    await insertWord({
       slug: "graywashing",
       word: "graywashing",
       status: "published",
       definition: "Superficial philanthropy masking a harmful record.",
     });
-    insertWord({ slug: "hidden", word: "hiddenword", status: "in_review", definition: "philanthropy" });
+    await insertWord({ slug: "hidden", word: "hiddenword", status: "in_review", definition: "philanthropy" });
   });
 
   it("finds a published word by name", async () => {
@@ -157,7 +162,7 @@ describe("GET /api/search", () => {
 
   it("caps the result count at thirty", async () => {
     for (let i = 0; i < 40; i++) {
-      insertWord({ slug: `bulk${i}`, word: `bulkword${i}`, status: "published", definition: "shared definition token" });
+      await insertWord({ slug: `bulk${i}`, word: `bulkword${i}`, status: "published", definition: "shared definition token" });
     }
     const body = await (await searchRoute.GET(jsonRequest("http://localhost/api/search?q=shared"))).json();
     expect(body.words.length).toBeLessThanOrEqual(30);
@@ -165,10 +170,10 @@ describe("GET /api/search", () => {
 });
 
 describe("GET /api/popularity", () => {
-  beforeEach(() => {
-    insertWord({ slug: "hot", word: "hot", status: "published", use_votes: 5, work_votes: 4, published_at: "2026-09-01 00:00:00" });
-    insertWord({ slug: "loved", word: "loved", status: "published", use_votes: 20, published_at: "2026-08-01 00:00:00" });
-    insertWord({ slug: "draft", word: "draft", status: "in_review", use_votes: 99 });
+  beforeEach(async () => {
+    await insertWord({ slug: "hot", word: "hot", status: "published", use_votes: 5, work_votes: 4, published_at: "2026-09-01 00:00:00" });
+    await insertWord({ slug: "loved", word: "loved", status: "published", use_votes: 20, published_at: "2026-08-01 00:00:00" });
+    await insertWord({ slug: "draft", word: "draft", status: "in_review", use_votes: 99 });
   });
 
   it("defaults to the trending lens", async () => {
@@ -235,7 +240,7 @@ describe("POST /api/coin/verify", () => {
     const body = await res.json();
     expect(body.word).toBe("zephquake");
     expect(body.verification.verdict).toBe("NEW");
-    expect((getDb().prepare("SELECT COUNT(*) AS n FROM words").get() as { n: number }).n).toBe(0);
+    expect(((await rawGet("SELECT COUNT(*) AS n FROM words")) as { n: number }).n).toBe(0);
   });
 
   it("reports UNVERIFIED when the search provider is unreachable", async () => {
@@ -263,7 +268,7 @@ describe("POST /api/coin/candidates", () => {
   const call = (body: unknown) =>
     candidatesRoute.POST(jsonRequest("http://localhost/api/coin/candidates", body, headers()));
 
-  beforeEach(() => {
+  beforeEach(async () => {
     delete process.env.AI_API_KEY;
   });
 

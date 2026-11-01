@@ -2,7 +2,7 @@
 // coins candidate words via the AI adapter, verifies novelty, and submits the
 // survivors into the review queue — same gates as every other submission path.
 
-import { getDb } from "./db";
+import { qAll, qGet, qRun } from "./db";
 import { aiConfigured, fetchUrlContent, generateCandidates } from "./ai";
 import { badgeFromVerdict, verifyNovelty } from "./verify";
 import { slugify, uniqueSlug, type Verification } from "./words";
@@ -25,13 +25,13 @@ const FALLBACK_FEEDS = [
 type Material = { from: string; url?: string; text: string };
 
 async function gatherMaterial(count: number): Promise<Material[]> {
-  const db = getDb();
   const materials: Material[] = [];
 
-  const seeds = db
-    .prepare("SELECT id, url, note FROM seeds WHERE status = 'pending' ORDER BY id ASC LIMIT ?")
-    .all(count * 2) as { id: number; url: string; note: string }[];
-  for (const s of seeds) {
+  const seedRows = await qAll<{ id: number; url: string; note: string }>(
+    "SELECT id, url, note FROM seeds WHERE status = 'pending' ORDER BY id ASC LIMIT ?",
+    [count * 2]
+  );
+  for (const s of seedRows) {
     materials.push({ from: `seed#${s.id}`, url: s.url, text: s.note ?? "" });
   }
 
@@ -75,8 +75,8 @@ async function fetchRssItems(url: string, max: number): Promise<{ title: string;
   return items;
 }
 
-function wordExists(word: string): boolean {
-  return !!getDb().prepare("SELECT 1 FROM words WHERE LOWER(word) = LOWER(?)").get(word);
+async function wordExists(word: string): Promise<boolean> {
+  return !!(await qGet("SELECT 1 FROM words WHERE LOWER(word) = LOWER(?)", [word]));
 }
 
 function domainOf(url: string): string {
@@ -92,7 +92,6 @@ export async function coinDaily(count: number): Promise<CoinReport> {
   if (!aiConfigured()) {
     return { requested: count, coined: [], error: "AI_NOT_CONFIGURED" };
   }
-  const db = getDb();
   const report: CoinReport = { requested: count, coined: [] };
   const materials = await gatherMaterial(count);
 
@@ -143,46 +142,51 @@ export async function coinDaily(count: number): Promise<CoinReport> {
     } catch {
       verification = { verdict: "UNVERIFIED", note: "verification services unreachable during auto-coin run" };
     }
-    if (verification.verdict === "EXISTS" || wordExists(chosen.word)) {
+    if (verification.verdict === "EXISTS" || (await wordExists(chosen.word))) {
       report.coined.push({ ok: false, from: material.from, error: `collision: "${chosen.word}" already exists` });
       continue;
     }
 
-    const slug = uniqueSlug(chosen.word);
-    db.prepare(
+    const slug = await uniqueSlug(chosen.word);
+    const relatedSlugs: string[] = [];
+    for (const w of chosen.related_concepts) {
+      const s = slugify(w);
+      if (s && (await qGet("SELECT 1 FROM words WHERE slug = ? AND status = 'published'", [s]))) relatedSlugs.push(s);
+    }
+    const info = await qRun(
       `INSERT INTO words (slug, word, pronunciation, definition, explanation, why_this_word,
         alternatives_json, verification_json, references_json, related_words, categories_json,
         ai_assisted, status, badge, input_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'in_review', ?, 'auto')`
-    ).run(
-      slug,
-      chosen.word,
-      chosen.pronunciation || null,
-      chosen.suggested_definition,
-      "",
-      `${chosen.rationale}\n\nEtymology: ${chosen.etymology}`,
-      JSON.stringify(others),
-      JSON.stringify(verification),
-      JSON.stringify(reference ? [reference] : []),
-      // Related words are best-effort: keep only suggestions that name existing
-      // entries, so no word page ever links into a 404.
-      JSON.stringify(
-        chosen.related_concepts
-          .map((w) => slugify(w))
-          .filter((s) => s && db.prepare("SELECT 1 FROM words WHERE slug = ?").get(s))
-      ),
-      // Categories are pre-selected by the coiner (protocol §2 rule 9).
-      JSON.stringify(chosen.categories),
-      badgeFromVerdict(verification.verdict)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'in_review', ?, 'auto')`,
+      [
+        slug,
+        chosen.word,
+        chosen.pronunciation || null,
+        chosen.suggested_definition,
+        "",
+        `${chosen.rationale}\n\nEtymology: ${chosen.etymology}`,
+        JSON.stringify(others),
+        JSON.stringify(verification),
+        JSON.stringify(reference ? [reference] : []),
+        // Related words are best-effort: keep only suggestions that name existing
+        // entries, so no word page ever links into a 404.
+        JSON.stringify(relatedSlugs),
+        // Categories are pre-selected by the coiner (protocol §2 rule 9).
+        JSON.stringify(chosen.categories),
+        badgeFromVerdict(verification.verdict),
+      ]
     );
-    db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, NULL, 'Auto-coined daily run', '{}')").run(
-      (db.prepare("SELECT id FROM words WHERE slug = ?").get(slug) as { id: number }).id
-    );
+    await qRun("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, NULL, 'Auto-coined daily run', '{}')", [
+      info.lastInsertRowid,
+    ]);
 
     // Bookkeeping: mark the seed this came from as coined.
     const seedMatch = material.from.match(/^seed#(\d+)$/);
     if (seedMatch) {
-      db.prepare("UPDATE seeds SET status = 'coined', slug = ?, updated_at = datetime('now') WHERE id = ?").run(slug, Number(seedMatch[1]));
+      await qRun("UPDATE seeds SET status = 'coined', slug = ?, updated_at = datetime('now') WHERE id = ?", [
+        slug,
+        Number(seedMatch[1]),
+      ]);
     }
 
     report.coined.push({ ok: true, slug, word: chosen.word, verdict: verification.verdict, from: material.from });

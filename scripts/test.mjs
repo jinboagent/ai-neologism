@@ -3,7 +3,7 @@
 // Requires: server on BASE (default http://localhost:3000) and the seeded
 // reviewer key (re-run `npm run seed` and update TEST_REVIEWER_KEY if it changed).
 
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -95,18 +95,20 @@ function assertNoPrivateFields(name, payload) {
 // DB cleanup of previous test runs (words prefixed zztest*, seeds zztest-*)
 
 const dbFile = path.join(process.cwd(), "data", "ai-neologism.db");
-if (fs.existsSync(dbFile)) {
-  const db = new Database(dbFile);
-  const clean = () => {
-    db.prepare("DELETE FROM votes WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')").run();
-    db.prepare("DELETE FROM revisions WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')").run();
-    db.prepare("DELETE FROM reviews WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')").run();
-    db.prepare("DELETE FROM words WHERE word LIKE 'zztest%'").run();
-    db.prepare("DELETE FROM seeds WHERE url LIKE 'https://zztest-%'").run();
-  };
-  clean();
+const CLEANUP_SQL = [
+  "DELETE FROM votes WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')",
+  "DELETE FROM revisions WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')",
+  "DELETE FROM reviews WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')",
+  "DELETE FROM words WHERE word LIKE 'zztest%'",
+  "DELETE FROM seeds WHERE url LIKE 'https://zztest-%'",
+];
+async function cleanTestRows() {
+  if (!fs.existsSync(dbFile)) return;
+  const db = createClient({ url: `file:${dbFile.replace(/\\/g, "/")}` });
+  for (const sql of CLEANUP_SQL) await db.execute(sql);
   db.close();
 }
+await cleanTestRows();
 
 // ---------------------------------------------------------------------------
 // tests
@@ -537,16 +539,8 @@ await testCron();
 await testAdminWordManagement();
 
 // cleanup of this run's data
-if (fs.existsSync(dbFile)) {
-  const db = new Database(dbFile);
-  db.prepare("DELETE FROM votes WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')").run();
-  db.prepare("DELETE FROM revisions WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')").run();
-  db.prepare("DELETE FROM reviews WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')").run();
-  db.prepare("DELETE FROM words WHERE word LIKE 'zztest%'").run();
-  db.prepare("DELETE FROM seeds WHERE url LIKE 'https://zztest-%'").run();
-  db.close();
-  console.log("\n(cleaned up test data)");
-}
+await cleanTestRows();
+console.log("\n(cleaned up test data)");
 
 console.log(`\n══════════ RESULT: ${pass} passed, ${fail} failed ══════════`);
 if (failures.length) {

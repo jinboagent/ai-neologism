@@ -5,7 +5,8 @@ import type { Metadata } from "next";
 import { Badge, StatusPill } from "@/components/badge";
 import { IconExternal } from "@/components/icons";
 import { VoteWidget } from "@/components/vote-widget";
-import { getDb } from "@/lib/db";
+import { isSafeHttpUrl } from "@/lib/sanitize";
+import { qAll } from "@/lib/db";
 import { KEY_COOKIE, hashKey } from "@/lib/keys";
 import { getWord } from "@/lib/words";
 
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const jar = await cookies();
   const cookieKey = jar.get(KEY_COOKIE)?.value;
-  const word = getWord(slug, cookieKey ? hashKey(cookieKey) : null);
+  const word = await getWord(slug, cookieKey ? hashKey(cookieKey) : null);
   if (!word) return { title: "Word not found" };
   return { title: word.word, description: word.definition };
 }
@@ -65,12 +66,13 @@ export default async function WordPage({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const jar = await cookies();
   const cookieKey = jar.get(KEY_COOKIE)?.value;
-  const word = getWord(slug, cookieKey ? hashKey(cookieKey) : null);
+  const word = await getWord(slug, cookieKey ? hashKey(cookieKey) : null);
   if (!word) notFound();
 
-  const revisions = getDb()
-    .prepare("SELECT id, summary, created_at FROM revisions WHERE word_id = ? ORDER BY id DESC")
-    .all(word.id) as { id: number; summary: string; created_at: string }[];
+  const revisions = await qAll<{ id: number; summary: string; created_at: string }>(
+    "SELECT id, summary, created_at FROM revisions WHERE word_id = ? ORDER BY id DESC",
+    [word.id]
+  );
 
   const v = word.verification;
 
@@ -152,7 +154,7 @@ export default async function WordPage({ params }: { params: Promise<{ slug: str
             <ul className="mt-3 space-y-1 text-sm">
               {v.closest_matches.map((m, i) => (
                 <li key={i} className="text-muted-foreground">
-                  {m.url ? (
+                  {m.url && isSafeHttpUrl(m.url) ? (
                     <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1 break-all">
                       {safeHost(m.url)}
                       <IconExternal className="h-3 w-3 shrink-0" />
@@ -202,7 +204,7 @@ export default async function WordPage({ params }: { params: Promise<{ slug: str
                 <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                   {REF_LABEL[r.type] ?? r.type}
                 </span>
-                {r.url ? (
+                {r.url && isSafeHttpUrl(r.url) ? (
                   <a href={r.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
                     {r.title}
                   </a>

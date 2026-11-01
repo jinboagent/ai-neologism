@@ -10,7 +10,7 @@
 // EXISTS verdicts are NOT inserted (the gate). Everything else — NEW,
 // NEAR_EXISTING, UNVERIFIED — enters the review queue for the human decision.
 
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -33,8 +33,7 @@ const slugify = (word) =>
   word.toLowerCase().trim().replace(/[^a-z0-9\s_-]/g, "").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 const badgeFromVerdict = (v) => ({ NEW: "new", NEAR_EXISTING: "near_existing", EXISTS: "collision", UNVERIFIED: "unverified" }[v] ?? "unverified");
 
-const db = new Database(path.join(process.cwd(), "data", "ai-neologism.db"));
-db.pragma("journal_mode = WAL");
+const db = createClient({ url: `file:${path.join(process.cwd(), "data", "ai-neologism.db").replace(/\\/g, "/")}` });
 
 function uniqueSlug(base) {
   let slug = slugify(base) || "word";
@@ -101,7 +100,7 @@ for (const c of candidates) {
   if (done >= LIMIT) break;
   done++;
 
-  if (db.prepare("SELECT 1 FROM words WHERE LOWER(word) = LOWER(?)").get(c.word)) {
+  if ((await db.execute({ sql: "SELECT 1 FROM words WHERE LOWER(word) = LOWER(?)", args: [c.word] })).rows.length > 0) {
     report.skipped.push({ word: c.word, reason: "already in dictionary" });
     console.log(`skip   ${c.word} (already present)`);
     continue;
@@ -133,28 +132,38 @@ for (const c of candidates) {
     "Culture & Language",
     "Health",
   ];
-  const related = (c.related_words ?? [])
-    .map((w) => slugify(w))
-    .filter((s) => s && db.prepare("SELECT 1 FROM words WHERE slug = ?").get(s));
+  // Related words are best-effort and only stored when the target entry exists
+  // AND is published - links must never point at words the public cannot see.
+  const related = [];
+  for (const w of c.related_words ?? []) {
+    const s2 = slugify(w);
+    if (!s2) continue;
+    const hit = await db.execute({
+      sql: "SELECT 1 FROM words WHERE slug = ? AND status = 'published'",
+      args: [s2],
+    });
+    if (hit.rows.length > 0) related.push(s2);
+  }
   const categories = (c.categories ?? []).filter((x) => VALID_CATEGORIES.includes(x)).slice(0, 2);
-  db.prepare(
-    `INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
+  await db.execute({
+    sql: `INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
       alternatives_json, verification_json, references_json, related_words, categories_json,
       ai_assisted, status, badge, input_type, contributor_key_hash, contact_email)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, '[]', ?, ?, 1, 'in_review', ?, 'api', NULL, NULL)`
-  ).run(
-    slug,
-    c.word,
-    c.pronunciation ?? null,
-    c.part_of_speech ?? "noun",
-    c.definition,
-    c.explanation ?? "",
-    c.why_this_word ?? "",
-    JSON.stringify(verification),
-    JSON.stringify(related),
-    JSON.stringify(categories),
-    badgeFromVerdict(verification.verdict)
-  );
+     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, '[]', ?, ?, 1, 'in_review', ?, 'api', NULL, NULL)`,
+    args: [
+      slug,
+      c.word,
+      c.pronunciation ?? null,
+      c.part_of_speech ?? "noun",
+      c.definition,
+      c.explanation ?? "",
+      c.why_this_word ?? "",
+      JSON.stringify(verification),
+      JSON.stringify(related),
+      JSON.stringify(categories),
+      badgeFromVerdict(verification.verdict),
+    ],
+  });
   const id = db.prepare("SELECT id FROM words WHERE slug = ?").get(slug).id;
   db.prepare("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, NULL, 'Editorial batch submission', '{}')").run(id);
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/badge";
 import { IconSparkle } from "@/components/icons";
+import { isSafeHttpUrl } from "@/lib/sanitize";
 import {
   EMPTY_FORM,
   Field,
@@ -338,7 +339,7 @@ function AiPath() {
               <ul className="w-full text-xs text-muted-foreground">
                 {verification.closest_matches.map((m, i) => (
                   <li key={i}>
-                    {m.url && (
+                    {m.url && isSafeHttpUrl(m.url) && (
                       <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                         {m.url}
                       </a>

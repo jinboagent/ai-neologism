@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { qAll, qGet, qRun, withTx } from "./db";
 import { canReview } from "./keys";
 
 export type Reference = {
@@ -98,27 +98,8 @@ export function toPublic(w: Word): PublicWord {
   return rest;
 }
 
-/**
- * Field bounds shared by every write path. POST and PUT used to disagree — POST
- * capped the definition at 600 characters while PUT accepted anything.
- */
-export const LIMITS = {
-  word: { min: 2, max: 80 },
-  definition: { min: 10, max: 600 },
-  explanation: { max: 4000 },
-  whyThisWord: { max: 4000 },
-  pronunciation: { max: 120 },
-  partOfSpeech: { max: 40 },
-  alternatives: 8,
-  references: 12,
-  relatedWords: 12,
-  categories: 6,
-} as const;
-
-const PUBLIC_COLS = `id, slug, word, pronunciation, part_of_speech, definition, explanation,
-  why_this_word, alternatives_json, verification_json, references_json, related_words,
-  categories_json, ai_assisted, status, return_notes, badge, input_type, contributor_key_hash,
-  contact_email, use_votes, work_votes, published_at, created_at, updated_at`;
+// Field bounds live in ./limits — a client-safe module (see the note there).
+export { LIMITS } from "./limits";
 
 export function slugify(word: string): string {
   return word
@@ -132,105 +113,92 @@ export function slugify(word: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export function uniqueSlug(base: string): string {
-  const db = getDb();
+export async function uniqueSlug(base: string): Promise<string> {
   let slug = slugify(base);
   if (!slug) slug = "word";
   let candidate = slug;
   let n = 2;
-  while (db.prepare("SELECT 1 FROM words WHERE slug = ?").get(candidate)) {
+  while (await qGet("SELECT 1 FROM words WHERE slug = ?", [candidate])) {
     candidate = `${slug}-${n++}`;
   }
   return candidate;
 }
 
-export function listPublished(opts: { limit?: number; offset?: number } = {}): Word[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT ${PUBLIC_COLS} FROM words WHERE status = 'published'
-       ORDER BY published_at DESC LIMIT ? OFFSET ?`
-    )
-    .all(opts.limit ?? 50, opts.offset ?? 0) as WordRow[];
+export async function listPublished(opts: { limit?: number; offset?: number } = {}): Promise<Word[]> {
+  const rows = await qAll<WordRow>(
+    `SELECT * FROM words WHERE status = 'published'
+     ORDER BY published_at DESC LIMIT ? OFFSET ?`,
+    [opts.limit ?? 50, opts.offset ?? 0]
+  );
   return rows.map(hydrate);
 }
 
-export function countPublished(): number {
-  return (getDb()
-    .prepare("SELECT COUNT(*) AS n FROM words WHERE status = 'published'")
-    .get() as { n: number }).n;
+export async function countPublished(): Promise<number> {
+  const row = await qGet<{ n: number }>("SELECT COUNT(*) AS n FROM words WHERE status = 'published'");
+  return row?.n ?? 0;
 }
 
 /** Visibility: published words are public; drafts/queue items only to their owner or a reviewer. */
-export function getWord(slug: string, viewerKeyHash?: string | null): Word | null {
-  const db = getDb();
-  const row = db
-    .prepare(`SELECT ${PUBLIC_COLS} FROM words WHERE slug = ?`)
-    .get(slug) as WordRow | undefined;
+export async function getWord(slug: string, viewerKeyHash?: string | null): Promise<Word | null> {
+  const row = await qGet<WordRow>("SELECT * FROM words WHERE slug = ?", [slug]);
   if (!row) return null;
   const w = hydrate(row);
   const isOwner = viewerKeyHash && w.contributor_key_hash === viewerKeyHash;
-  const isReviewer = viewerKeyHash && canReview(viewerKeyHash);
+  const isReviewer = viewerKeyHash ? await canReview(viewerKeyHash) : false;
   if (w.status !== "published" && !isOwner && !isReviewer) return null;
   return w;
 }
 
-export function listByLetter(letter: string): Word[] {
+export async function listByLetter(letter: string): Promise<Word[]> {
   // Escape LIKE metacharacters so a "%" or "_" in `letter` matches literally
   // instead of acting as a wildcard.
   const escaped = letter.replace(/[\\%_]/g, (m) => `\\${m}`);
-  const rows = getDb()
-    .prepare(
-      `SELECT ${PUBLIC_COLS} FROM words WHERE status = 'published' AND word LIKE ? ESCAPE '\\'
-       ORDER BY word COLLATE NOCASE`
-    )
-    .all(`${escaped}%`) as WordRow[];
+  const rows = await qAll<WordRow>(
+    `SELECT * FROM words WHERE status = 'published' AND word LIKE ? ESCAPE '\\'
+     ORDER BY word COLLATE NOCASE`,
+    [`${escaped}%`]
+  );
   return rows.map(hydrate);
 }
 
-export function alphabetWithCounts(): { letter: string; count: number }[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT UPPER(SUBSTR(word, 1, 1)) AS letter, COUNT(*) AS n FROM words
-       WHERE status = 'published' GROUP BY letter ORDER BY letter`
-    )
-    .all() as { letter: string; n: number }[];
+export async function alphabetWithCounts(): Promise<{ letter: string; count: number }[]> {
+  const rows = await qAll<{ letter: string; n: number }>(
+    `SELECT UPPER(SUBSTR(word, 1, 1)) AS letter, COUNT(*) AS n FROM words
+     WHERE status = 'published' GROUP BY letter ORDER BY letter`
+  );
   return rows.filter((r) => /^[A-Z]$/.test(r.letter)).map((r) => ({ letter: r.letter, count: r.n }));
 }
 
-export function searchWords(q: string, limit = 30): Word[] {
-  const db = getDb();
+export async function searchWords(q: string, limit = 30): Promise<Word[]> {
   // Phrase-quote the query so user punctuation can't break FTS syntax.
   const sanitized = q.replace(/["*()]/g, " ").replace(/['-]/g, " ").trim();
   if (!sanitized) return [];
-  const rows = db
-    .prepare(
-      `SELECT w.* FROM words_fts f
-       JOIN words w ON w.id = f.rowid
-       WHERE words_fts MATCH ? AND w.status = 'published'
-       ORDER BY rank LIMIT ?`
-    )
-    .all(`"${sanitized}"`, limit) as WordRow[];
+  const rows = await qAll<WordRow>(
+    `SELECT w.* FROM words_fts f
+     JOIN words w ON w.id = f.rowid
+     WHERE words_fts MATCH ? AND w.status = 'published'
+     ORDER BY rank LIMIT ?`,
+    [`"${sanitized}"`, limit]
+  );
   return rows.map(hydrate);
 }
 
 export type PopularityLens = "trending" | "endorsed" | "contested" | "verified";
 
-export function popularity(lens: PopularityLens, limit = 10): Word[] {
-  const db = getDb();
-  let sql = "";
+export async function popularity(lens: PopularityLens, limit = 10): Promise<Word[]> {
+  let sql: string;
   switch (lens) {
     case "endorsed":
-      sql = `SELECT ${PUBLIC_COLS} FROM words WHERE status='published' AND use_votes > 0
+      sql = `SELECT * FROM words WHERE status='published' AND use_votes > 0
              ORDER BY use_votes DESC, work_votes ASC LIMIT ?`;
       break;
     case "contested":
-      sql = `SELECT ${PUBLIC_COLS}, (use_votes * work_votes) AS heat FROM words
+      sql = `SELECT *, (use_votes * work_votes) AS heat FROM words
              WHERE status='published' AND use_votes > 0 AND work_votes > 0
              ORDER BY heat DESC LIMIT ?`;
       break;
     case "verified":
-      sql = `SELECT ${PUBLIC_COLS} FROM words WHERE status='published'
+      sql = `SELECT * FROM words WHERE status='published'
              ORDER BY published_at DESC LIMIT ?`;
       break;
     case "trending":
@@ -244,34 +212,51 @@ export function popularity(lens: PopularityLens, limit = 10): Word[] {
              ORDER BY points DESC, w.published_at DESC LIMIT ?`;
       break;
   }
-  const rows = db.prepare(sql).all(limit) as WordRow[];
+  const rows = await qAll<WordRow>(sql, [limit]);
   return rows.map(hydrate);
 }
 
-export function recordVote(slug: string, voterHash: string, vote: 1 | -1): { ok: boolean; use_votes: number; work_votes: number } {
-  const db = getDb();
-  const word = db.prepare("SELECT id, use_votes, work_votes FROM words WHERE slug = ? AND status='published'").get(slug) as
-    | { id: number; use_votes: number; work_votes: number }
-    | undefined;
-  if (!word) return { ok: false, use_votes: 0, work_votes: 0 };
-  const tx = db.transaction(() => {
-    const existing = db.prepare("SELECT vote FROM votes WHERE word_id = ? AND voter_hash = ?").get(word.id, voterHash) as
-      | { vote: number }
-      | undefined;
+export function recordVote(
+  slug: string,
+  voterHash: string,
+  vote: 1 | -1
+): Promise<{ ok: boolean; use_votes: number; work_votes: number }> {
+  return withTx(async (tx) => {
+    const wordRes = await tx.execute(
+      "SELECT id, use_votes, work_votes FROM words WHERE slug = ? AND status='published'",
+      [slug]
+    );
+    const word = wordRes.rows[0] as unknown as { id: number; use_votes: number; work_votes: number } | undefined;
+    if (!word) return { ok: false, use_votes: 0, work_votes: 0 };
+
+    const existingRes = await tx.execute("SELECT vote FROM votes WHERE word_id = ? AND voter_hash = ?", [
+      word.id,
+      voterHash,
+    ]);
+    const existing = existingRes.rows[0] as unknown as { vote: number } | undefined;
     if (existing) {
       if (existing.vote === vote) {
-        db.prepare("DELETE FROM votes WHERE word_id = ? AND voter_hash = ?").run(word.id, voterHash);
+        await tx.execute("DELETE FROM votes WHERE word_id = ? AND voter_hash = ?", [word.id, voterHash]);
       } else {
-        db.prepare("UPDATE votes SET vote = ?, created_at = datetime('now') WHERE word_id = ? AND voter_hash = ?").run(vote, word.id, voterHash);
+        await tx.execute("UPDATE votes SET vote = ?, created_at = datetime('now') WHERE word_id = ? AND voter_hash = ?", [
+          vote,
+          word.id,
+          voterHash,
+        ]);
       }
     } else {
-      db.prepare("INSERT INTO votes (word_id, voter_hash, vote) VALUES (?, ?, ?)").run(word.id, voterHash, vote);
+      await tx.execute("INSERT INTO votes (word_id, voter_hash, vote) VALUES (?, ?, ?)", [word.id, voterHash, vote]);
     }
-    const counts = db
-      .prepare("SELECT COALESCE(SUM(CASE WHEN vote = 1 THEN 1 ELSE 0 END),0) AS u, COALESCE(SUM(CASE WHEN vote = -1 THEN 1 ELSE 0 END),0) AS w FROM votes WHERE word_id = ?")
-      .get(word.id) as { u: number; w: number };
-    db.prepare("UPDATE words SET use_votes = ?, work_votes = ?, updated_at = datetime('now') WHERE id = ?").run(counts.u, counts.w, word.id);
+    const countsRes = await tx.execute(
+      "SELECT COALESCE(SUM(CASE WHEN vote = 1 THEN 1 ELSE 0 END),0) AS u, COALESCE(SUM(CASE WHEN vote = -1 THEN 1 ELSE 0 END),0) AS w FROM votes WHERE word_id = ?",
+      [word.id]
+    );
+    const counts = countsRes.rows[0] as unknown as { u: number; w: number };
+    await tx.execute("UPDATE words SET use_votes = ?, work_votes = ?, updated_at = datetime('now') WHERE id = ?", [
+      counts.u,
+      counts.w,
+      word.id,
+    ]);
     return { ok: true, use_votes: counts.u, work_votes: counts.w };
   });
-  return tx();
 }

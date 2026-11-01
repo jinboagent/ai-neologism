@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { qGet, qRun } from "@/lib/db";
 import { resolveKeyHash } from "@/lib/keys";
 
 export const dynamic = "force-dynamic";
@@ -11,14 +11,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const keyHash = await resolveKeyHash(req);
   if (!keyHash) return NextResponse.json({ error: "NO_KEY" }, { status: 401 });
 
-  const seed = getDb()
-    .prepare("SELECT id, contributor_key_hash FROM seeds WHERE id = ?")
-    .get(Number(id)) as SeedRow | undefined;
+  const seed = await qGet<SeedRow>("SELECT id, contributor_key_hash FROM seeds WHERE id = ?", [Number(id)]);
   if (!seed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (seed.contributor_key_hash !== keyHash) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
-  getDb().prepare("DELETE FROM seeds WHERE id = ?").run(seed.id);
+  await qRun("DELETE FROM seeds WHERE id = ?", [seed.id]);
   return NextResponse.json({ deleted: seed.id });
 }
 
@@ -28,9 +26,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const keyHash = await resolveKeyHash(req);
   if (!keyHash) return NextResponse.json({ error: "NO_KEY" }, { status: 401 });
 
-  const seed = getDb()
-    .prepare("SELECT id, contributor_key_hash FROM seeds WHERE id = ?")
-    .get(Number(id)) as SeedRow | undefined;
+  const seed = await qGet<SeedRow>("SELECT id, contributor_key_hash FROM seeds WHERE id = ?", [Number(id)]);
   if (!seed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (seed.contributor_key_hash !== keyHash) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
@@ -46,8 +42,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "INVALID_STATUS", message: "status must be 'coined' or 'pending'." }, { status: 400 });
   }
   const slug = body.status === "coined" ? (body.slug ?? null) : null;
-  getDb()
-    .prepare("UPDATE seeds SET status = ?, slug = ?, updated_at = datetime('now') WHERE id = ?")
-    .run(body.status, slug, seed.id);
+  await qRun("UPDATE seeds SET status = ?, slug = ?, updated_at = datetime('now') WHERE id = ?", [body.status, slug, seed.id]);
   return NextResponse.json({ id: seed.id, status: body.status, slug });
 }

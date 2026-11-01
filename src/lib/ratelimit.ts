@@ -49,11 +49,29 @@ export function bucketCount(): number {
   return buckets.size;
 }
 
+/**
+ * Caller fingerprint for rate limits and vote de-duplication.
+ *
+ * The client-controlled `X-Forwarded-For` header is trusted ONLY when the
+ * operator sets TRUST_PROXY=true (i.e. the app runs behind a platform such as
+ * Vercel that overwrites/appends the real client IP). Without it — the default
+ * local/self-hosted case — every caller shares the "local" identity instead of
+ * being able to mint a fresh one per request (finding #2). On a trusted proxy
+ * the LAST entry of the list is used: it is the value our own proxy appended,
+ * which client-supplied spoofing cannot reach.
+ */
 export function voterFingerprint(req: Request): string {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "local";
+  let ip = "local";
+  if (process.env.TRUST_PROXY === "true") {
+    const xff = req.headers.get("x-forwarded-for");
+    const real = req.headers.get("x-real-ip");
+    if (xff) {
+      const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+      ip = parts[parts.length - 1] ?? real ?? "unknown";
+    } else {
+      ip = real ?? "unknown";
+    }
+  }
   const ua = req.headers.get("user-agent") ?? "unknown";
   return crypto.createHash("sha256").update(`${ip}|${ua}`).digest("hex");
 }

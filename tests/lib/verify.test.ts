@@ -36,14 +36,14 @@ const UNRELATED = {
 const wordNotFound = { status: 404 } as const;
 
 describe("badgeFromVerdict", () => {
-  it("maps every verdict to its badge", () => {
+  it("maps every verdict to its badge", async () => {
     expect(badgeFromVerdict("NEW")).toBe("new");
     expect(badgeFromVerdict("NEAR_EXISTING")).toBe("near_existing");
     expect(badgeFromVerdict("EXISTS")).toBe("collision");
     expect(badgeFromVerdict("UNVERIFIED")).toBe("unverified");
   });
 
-  it("falls back to unverified for an unrecognised verdict", () => {
+  it("falls back to unverified for an unrecognised verdict", async () => {
     expect(badgeFromVerdict("SOMETHING_ELSE" as never)).toBe("unverified");
   });
 });

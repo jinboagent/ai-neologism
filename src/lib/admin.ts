@@ -36,12 +36,11 @@ export function verifyToken(token: string | undefined | null): boolean {
 export function checkCredentials(username: string, password: string): boolean {
   const u = process.env.ADMIN_USERNAME ?? "";
   const p = process.env.ADMIN_PASSWORD ?? "";
-  const a = Buffer.from(username);
-  const b = Buffer.from(u);
-  const c = Buffer.from(password);
-  const d = Buffer.from(p);
-  const userOk = a.length === b.length && crypto.timingSafeEqual(a, b);
-  const passOk = c.length === d.length && crypto.timingSafeEqual(c, d);
+  // Compare digests, not raw strings: fixed-length inputs for timingSafeEqual,
+  // so the candidate's length is not observable through early exits.
+  const h = (s: string) => crypto.createHash("sha256").update(s).digest();
+  const userOk = h(username).equals(h(u));
+  const passOk = h(password).equals(h(p));
   return userOk && passOk;
 }
 

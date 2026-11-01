@@ -550,7 +550,7 @@ export default function AdminPage() {
 
               <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-muted-foreground">Edit before publish (optional)</h3>
               <div className="mt-3">
-                <WordForm form={form} setForm={setForm} onSubmit={() => decide("approve")} submitting={busy} submitLabel="Approve & publish" />
+                <WordForm form={form} setForm={setForm} onSubmit={() => decide("approve")} submitting={busy} submitLabel="Approve & publish" lockWord />
               </div>
             </div>
           )}

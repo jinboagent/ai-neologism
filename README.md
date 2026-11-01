@@ -44,4 +44,4 @@ Submissions via API enter the same review queue as web submissions — the API i
 
 ## Stack
 
-Next.js (App Router, TypeScript) · Tailwind CSS v4 · SQLite via better-sqlite3 (file at `data/ai-neologism.db`, gitignored) · pluggable OpenAI-compatible AI adapter · pluggable search adapter (DuckDuckGo / Tavily).
+Next.js (App Router, TypeScript) · Tailwind CSS v4 · SQLite via **@libsql/client** — locally a file at `data/ai-neologism.db` (gitignored), in production a Turso database (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`) · pluggable OpenAI-compatible AI adapter · pluggable search adapter (DuckDuckGo / Tavily) · deployable on Vercel with a built-in cron schedule (`vercel.json`).

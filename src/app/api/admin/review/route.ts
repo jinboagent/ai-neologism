@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { qAll, qGet, qRun, withTx } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
 import { sendRejectionEmail } from "@/lib/mailer";
+import { CATEGORIES } from "@/lib/categories";
+import { sanitizeAlternatives, sanitizeCategories, sanitizeReferences, sanitizeSlugList } from "@/lib/sanitize";
 import { hydrate, LIMITS, parseJsonColumn, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +31,7 @@ export async function GET() {
   if (!(await isAdmin())) {
     return NextResponse.json({ error: "ADMIN_REQUIRED", message: "Log in at /admin." }, { status: 401 });
   }
-  const rows = getDb()
-    .prepare("SELECT * FROM words WHERE status = 'in_review' AND input_type = 'api' ORDER BY created_at ASC")
-    .all() as WordRow[];
+  const rows = await qAll<WordRow>("SELECT * FROM words WHERE status = 'in_review' AND input_type = 'api' ORDER BY created_at ASC");
   return NextResponse.json({ queue: rows.map(hydrate) });
 }
 
@@ -58,10 +58,10 @@ export async function POST(req: Request) {
   }
   const auditReason = reason || "Approved by admin.";
 
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM words WHERE slug = ? AND status = 'in_review' AND input_type = 'api'").get(slug) as
-    | WordRow
-    | undefined;
+  const row = await qGet<WordRow>(
+    "SELECT * FROM words WHERE slug = ? AND status = 'in_review' AND input_type = 'api'",
+    [slug]
+  );
   if (!row) {
     return NextResponse.json({ error: "NOT_FOUND", message: "API submission not found or already decided." }, { status: 404 });
   }
@@ -92,46 +92,47 @@ export async function POST(req: Request) {
     if (over) {
       return NextResponse.json({ error: "FIELD_TOO_LONG", message: `${over[0]} must be at most ${over[2]} characters.` }, { status: 400 });
     }
-    const jsonList = (v: unknown, current: string, max: number): string => {
-      const list = Array.isArray(v) ? v : parseJsonColumn<unknown[]>(current, []);
-      return JSON.stringify(list.slice(0, max));
-    };
+    // Same sanitizers as every other write path (bug report #1/#3).
+    const nextAlternatives = e.alternatives !== undefined ? sanitizeAlternatives(e.alternatives) : parseJsonColumn<unknown[]>(row.alternatives_json, []);
+    const nextReferences = e.references !== undefined ? sanitizeReferences(e.references) : parseJsonColumn<unknown[]>(row.references_json, []);
+    const nextRelated = e.related_words !== undefined ? sanitizeSlugList(e.related_words) : parseJsonColumn<string[]>(row.related_words, []);
+    const nextCategories = e.categories !== undefined ? sanitizeCategories(e.categories, CATEGORIES) : parseJsonColumn<string[]>(row.categories_json, []);
 
-    db.prepare(
+    await qRun(
       `UPDATE words SET pronunciation=?, part_of_speech=?, definition=?, explanation=?, why_this_word=?,
        alternatives_json=?, references_json=?, related_words=?, categories_json=?, updated_at=datetime('now')
-       WHERE id=?`
-    ).run(
-      pronunciation,
-      partOfSpeech,
-      definition,
-      explanation,
-      whyThisWord,
-      jsonList(e.alternatives, row.alternatives_json, LIMITS.alternatives),
-      jsonList(e.references, row.references_json, LIMITS.references),
-      jsonList(e.related_words, row.related_words, LIMITS.relatedWords),
-      jsonList(e.categories, row.categories_json, LIMITS.categories),
-      row.id
+       WHERE id=?`,
+      [
+        pronunciation,
+        partOfSpeech,
+        definition,
+        explanation,
+        whyThisWord,
+        JSON.stringify(nextAlternatives),
+        JSON.stringify(nextReferences),
+        JSON.stringify(nextRelated),
+        JSON.stringify(nextCategories),
+        row.id,
+      ]
     );
     editsApplied = true;
   }
 
-  const tx = db.transaction(() => {
-    db.prepare("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, 'admin', ?, ?)").run(
+  await withTx(async (tx) => {
+    await tx.execute("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, 'admin', ?, ?)", [
       row.id,
       action === "approve" ? "approve" : "decline",
-      auditReason
-    );
+      auditReason,
+    ]);
     if (action === "approve") {
-      db.prepare("UPDATE words SET status='published', published_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(row.id);
+      await tx.execute("UPDATE words SET status='published', published_at=datetime('now'), updated_at=datetime('now') WHERE id=?", [row.id]);
       if (row.contributor_key_hash) {
-        db.prepare("UPDATE keys SET accepted_words = accepted_words + 1 WHERE key_hash = ?").run(row.contributor_key_hash);
+        await tx.execute("UPDATE keys SET accepted_words = accepted_words + 1 WHERE key_hash = ?", [row.contributor_key_hash]);
       }
     } else {
-      db.prepare("UPDATE words SET status='declined', return_notes=?, updated_at=datetime('now') WHERE id=?").run(reason, row.id);
+      await tx.execute("UPDATE words SET status='declined', return_notes=?, updated_at=datetime('now') WHERE id=?", [reason, row.id]);
     }
   });
-  tx();
 
   // Notify the submitter on rejection (only if they provided an address and mail is configured).
   let email: { sent: boolean; detail: string } | null = null;

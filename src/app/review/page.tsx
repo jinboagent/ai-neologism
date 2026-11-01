@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, StatusPill } from "@/components/badge";
+import { isSafeHttpUrl } from "@/lib/sanitize";
 
 type QueueWord = {
   slug: string;
@@ -207,7 +208,7 @@ export default function ReviewPage() {
                     {selected.references.map((r, i) => (
                       <li key={i}>
                         [{i + 1}]{" "}
-                        {r.url ? (
+                        {r.url && isSafeHttpUrl(r.url) ? (
                           <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                             {r.title}
                           </a>
