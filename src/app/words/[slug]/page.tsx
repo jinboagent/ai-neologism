@@ -37,13 +37,13 @@ function safeHost(url: string): string {
   }
 }
 
-function Paragraphs({ text }: { text: string }) {
+function Paragraphs({ text, className = "" }: { text: string; className?: string }) {
   const parts = text.split(/\n\s*\n/).filter((p) => p.trim());
   if (parts.length === 0) return null;
   return (
     <>
       {parts.map((p, i) => (
-        <p key={i} className="mt-4">
+        <p key={i} className={`mt-1 ${className}`}>
           {p}
         </p>
       ))}
@@ -51,17 +51,12 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-10">
-      <h2 className="border-b border-border pb-1 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
+/**
+ * Dictionary-compact entry (option B): the headword line carries IPA, part of
+ * speech and status; the definition is numbered; every further fact hangs off
+ * a run-in bold label instead of a full-width section header, so the whole
+ * entry fits in roughly one screen instead of four.
+ */
 export default async function WordPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const jar = await cookies();
@@ -75,11 +70,13 @@ export default async function WordPage({ params }: { params: Promise<{ slug: str
   );
 
   const v = word.verification;
+  const whyParas = word.why_this_word.split(/\n\s*\n/).filter((p) => p.trim());
+  const evidenceCount = v.closest_matches?.length ?? 0;
 
   return (
-    <article className="mx-auto max-w-6xl px-4 py-8">
+    <article className="mx-auto max-w-4xl px-4 py-6">
       {word.status !== "published" && (
-        <div className="mb-6 rounded-xl border border-warn/40 bg-warn-soft p-4">
+        <div className="mb-4 rounded-lg border border-warn/40 bg-warn-soft p-3">
           <div className="flex flex-wrap items-center gap-3">
             <StatusPill status={word.status} />
             <span className="text-sm text-warn">
@@ -95,80 +92,142 @@ export default async function WordPage({ params }: { params: Promise<{ slug: str
       )}
 
       <header>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="word-title text-4xl font-bold text-foreground">{word.word}</h1>
-          {word.pronunciation && <span className="text-lg text-muted-foreground">{word.pronunciation}</span>}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="word-title text-3xl font-bold text-foreground">{word.word}</h1>
+          {word.pronunciation && <span className="text-muted-foreground">{word.pronunciation}</span>}
           <span className="text-sm italic text-muted-foreground">{word.part_of_speech}</span>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge kind={word.badge} />
-          {word.categories.map((c) => (
-            <span key={c} className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs text-primary">
-              {c}
-            </span>
-          ))}
         </div>
+        {word.categories.length > 0 && (
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm">
+            {word.categories.map((c) => (
+              <Link
+                key={c}
+                href={`/search?q=${encodeURIComponent(c)}`}
+                className="rounded-full bg-primary-soft px-2 py-0.5 text-xs text-primary hover:underline"
+              >
+                {c}
+              </Link>
+            ))}
+          </p>
+        )}
       </header>
 
-      <Section title="Definition">
-        <p className="definition-lead font-semibold">{word.definition}</p>
-      </Section>
+      <div className="mt-3 border-t border-border pt-3">
+        <div className="flex gap-2">
+          <span className="word-title font-bold leading-[1.55]" aria-hidden="true">
+            1.
+          </span>
+          <p className="definition-lead font-semibold">{word.definition}</p>
+        </div>
 
-      {word.explanation && (
-        <Section title="Explanation">
-          <div className="reading-col">
+        {word.explanation && (
+          <div className="reading-col mt-2 text-[15px]">
             <Paragraphs text={word.explanation} />
           </div>
-        </Section>
-      )}
+        )}
 
-      {word.why_this_word && (
-        <Section title="Why this word">
-          <div className="reading-col rounded-xl border border-border bg-card p-4 text-muted-foreground">
-            <Paragraphs text={word.why_this_word} />
-          </div>
-        </Section>
-      )}
-
-      {word.alternatives.length > 0 && (
-        <Section title="Alternatives considered">
-          <ul className="space-y-2">
-            {word.alternatives.map((a) => (
-              <li key={a.word} className="text-sm">
-                <span className="word-title font-bold">{a.word}</span>
-                <span className="text-muted-foreground"> — {a.rationale}</span>
-              </li>
+        {whyParas.length > 0 && (
+          <div className="reading-col mt-3 text-[15px] text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Etym. — </strong>
+              {whyParas[0]}
+            </p>
+            {whyParas.slice(1).map((p, i) => (
+              <p key={i} className="mt-1">
+                {p}
+              </p>
             ))}
-          </ul>
-        </Section>
-      )}
+          </div>
+        )}
 
-      <Section title="Verification">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p>
-            <strong>Verdict: {v.verdict.replace("_", " ")}</strong>
-            {v.checked_at && <span className="text-muted-foreground"> · checked {v.checked_at}</span>}
+        {word.alternatives.length > 0 && (
+          <p className="reading-col mt-3 text-sm leading-relaxed">
+            <strong>Also considered — </strong>
+            {word.alternatives.map((a, i) => (
+              <span key={a.word}>
+                {i > 0 && " · "}
+                <span className="word-title font-bold">{a.word}</span>
+                <span className="text-muted-foreground"> ({a.rationale})</span>
+              </span>
+            ))}
           </p>
-          {v.note && <p className="mt-1 text-sm text-muted-foreground">{v.note}</p>}
-          {v.closest_matches && v.closest_matches.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm">
-              {v.closest_matches.map((m, i) => (
-                <li key={i} className="text-muted-foreground">
-                  {m.url && isSafeHttpUrl(m.url) ? (
-                    <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1 break-all">
-                      {safeHost(m.url)}
-                      <IconExternal className="h-3 w-3 shrink-0" />
+        )}
+
+        {word.related_words.length > 0 && (
+          <p className="mt-3 text-sm leading-relaxed">
+            <strong>Rel. — </strong>
+            {word.related_words.map((s, i) => (
+              <span key={s}>
+                {i > 0 && " · "}
+                <Link href={`/words/${s}`} className="word-title font-bold text-primary hover:underline">
+                  {s.replace(/-/g, " ")}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
+
+        {word.references.length > 0 && (
+          <div className="mt-3 text-sm leading-relaxed">
+            <strong>Refs.</strong>
+            <ol className="mt-0.5 space-y-0.5">
+              {word.references.map((r, i) => (
+                <li key={i} className="pl-7 -indent-7">
+                  <span className="tabular-nums text-muted-foreground">[{i + 1}]</span>{" "}
+                  <span className="rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">
+                    {REF_LABEL[r.type] ?? r.type}
+                  </span>{" "}
+                  {r.url && isSafeHttpUrl(r.url) ? (
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                      {r.title}
                     </a>
                   ) : (
-                    "— "
+                    <span className="font-medium">{r.title}</span>
                   )}
-                  {m.note}
+                  {r.outlet && <span className="text-muted-foreground"> · {r.outlet}</span>}
+                  {r.author && <span className="text-muted-foreground"> · {r.author}</span>}
+                  {r.date && <span className="text-muted-foreground"> · {r.date}</span>}
+                  {r.excerpt && (
+                    <span className="block border-l-2 border-border pl-3 text-xs italic text-muted-foreground">
+                      {r.excerpt}
+                    </span>
+                  )}
                 </li>
               ))}
-            </ul>
-          )}
-          <details className="mt-3">
-            <summary className="text-sm text-primary">View full search-evidence log</summary>
+            </ol>
+          </div>
+        )}
+
+        {/* Novelty evidence: one compact line plus a collapsible log — the full
+            query table and closest matches stay available but out of the way. */}
+        <div className="mt-4 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <p>
+            <strong>Novelty check: {v.verdict.replace("_", " ")}</strong>
+            {v.checked_at && <span className="text-muted-foreground"> · checked {v.checked_at}</span>}
+          </p>
+          {v.note && <p className="text-muted-foreground">{v.note}</p>}
+          <details className="mt-1">
+            <summary className="text-sm text-primary">
+              Evidence log{evidenceCount > 0 ? ` · ${evidenceCount} closest matches` : ""}
+            </summary>
+            {evidenceCount > 0 && (
+              <ul className="mt-2 space-y-1 text-sm">
+                {v.closest_matches!.map((m, i) => (
+                  <li key={i} className="pl-7 -indent-7 text-muted-foreground">
+                    {m.url && isSafeHttpUrl(m.url) ? (
+                      <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1 break-all">
+                        {safeHost(m.url)}
+                        <IconExternal className="h-3 w-3 shrink-0" />
+                      </a>
+                    ) : (
+                      "— "
+                    )}
+                    {m.note}
+                  </li>
+                ))}
+              </ul>
+            )}
             {v.queries && v.queries.length > 0 ? (
               <table className="mt-2 w-full text-sm">
                 <thead>
@@ -194,61 +253,20 @@ export default async function WordPage({ params }: { params: Promise<{ slug: str
             {v.method && <p className="mt-2 text-xs text-muted-foreground">Method: {v.method}</p>}
           </details>
         </div>
-      </Section>
 
-      {word.references.length > 0 && (
-        <Section title="References">
-          <ol className="space-y-3">
-            {word.references.map((r, i) => (
-              <li key={i} className="text-sm">
-                <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {REF_LABEL[r.type] ?? r.type}
-                </span>
-                {r.url && isSafeHttpUrl(r.url) ? (
-                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
-                    {r.title}
-                  </a>
-                ) : (
-                  <span className="font-medium">{r.title}</span>
-                )}
-                {r.outlet && <span className="text-muted-foreground"> · {r.outlet}</span>}
-                {r.author && <span className="text-muted-foreground"> · {r.author}</span>}
-                {r.date && <span className="text-muted-foreground"> · {r.date}</span>}
-                {r.excerpt && <p className="mt-1 border-l-2 border-border pl-3 italic text-muted-foreground">{r.excerpt}</p>}
-              </li>
-            ))}
-          </ol>
-        </Section>
-      )}
-
-      {word.status === "published" && (
-        <Section title="Community">
-          <VoteWidget slug={word.slug} initialUse={word.use_votes} initialWork={word.work_votes} />
-        </Section>
-      )}
-
-      {word.related_words.length > 0 && (
-        <Section title="Related words">
-          <div className="flex flex-wrap gap-2">
-            {word.related_words.map((slug) => (
-              <Link
-                key={slug}
-                href={`/words/${slug}`}
-                className="word-title rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-bold text-primary hover:border-primary transition-colors"
-              >
-                {slug.replace(/-/g, " ")}
-              </Link>
-            ))}
+        {word.status === "published" && (
+          <div className="mt-4 border-y border-border py-3">
+            <VoteWidget slug={word.slug} initialUse={word.use_votes} initialWork={word.work_votes} />
           </div>
-        </Section>
-      )}
+        )}
+      </div>
 
-      <footer className="mt-10 border-t border-border pt-4 text-sm text-muted-foreground">
+      <footer className="mt-6 border-t border-border pt-3 text-sm text-muted-foreground">
         <p>
           Coined by an anonymous contributor{word.ai_assisted && " · AI-assisted"} · first submitted {word.created_at.slice(0, 10)}
           {word.published_at && ` · published ${word.published_at.slice(0, 10)}`}
         </p>
-        <details className="mt-2">
+        <details className="mt-1">
           <summary className="text-primary">Revision history ({revisions.length})</summary>
           <ul className="mt-2 space-y-1">
             {revisions.map((r) => (
