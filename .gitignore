@@ -42,3 +42,7 @@ next-env.d.ts
 
 # local database
 /data
+
+# internal working documents & review lists — local only
+/docs/
+/wordstoreview/
