@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, StatusPill } from "@/components/badge";
-import { EMPTY_FORM, WordForm, type FormState, type RefRow } from "@/components/word-form";
+import { EMPTY_FORM, WordForm, type FormState } from "@/components/word-form";
 
 type AdminWord = {
   slug: string;
@@ -131,7 +131,7 @@ export default function AdminPage() {
         }
       })
       .catch(() => setSession("out"));
-  }, [loadQueue]);
+  }, [loadQueue, loadPublished]);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();

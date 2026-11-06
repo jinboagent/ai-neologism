@@ -109,6 +109,22 @@ describe("POST /api/key", () => {
     const b = await (await keyRoute.POST()).json();
     expect(a.key).not.toBe(b.key);
   });
+
+  it("rate-limits minting to 10 per hour per fingerprint", async () => {
+    // Regression (2026-11-06 QA pass): keys were free to mint, so the per-key
+    // submission cap could be bypassed by minting a fresh key per request —
+    // each of which costs a server-side novelty search.
+    const fixed = { "x-forwarded-for": "198.51.100.7", "user-agent": "KeyMintTest/1.0" };
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++) {
+      statuses.push((await keyRoute.POST(jsonRequest("http://localhost/api/key", {}, fixed))).status);
+    }
+    expect(statuses.slice(0, 10).every((s) => s === 201)).toBe(true);
+    expect(statuses[10]).toBe(429);
+    // A different fingerprint is unaffected.
+    const other = await keyRoute.POST(jsonRequest("http://localhost/api/key", {}, { "x-forwarded-for": "198.51.100.8" }));
+    expect(other.status).toBe(201);
+  });
 });
 
 describe("GET /api/search", () => {

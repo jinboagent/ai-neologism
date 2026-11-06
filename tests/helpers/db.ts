@@ -30,6 +30,8 @@ export type WordSeed = Partial<{
   updated_at: string;
   categories_json: string;
   alternatives_json: string;
+  references_json: string;
+  related_words: string;
   verification_json: string;
   ai_assisted: number;
 }>;
@@ -41,8 +43,8 @@ export async function insertWord(seed: WordSeed = {}): Promise<number> {
   const info = await qRun(
     `INSERT INTO words (slug, word, definition, explanation, why_this_word, status, badge,
       contributor_key_hash, use_votes, work_votes, published_at, created_at, updated_at,
-      categories_json, alternatives_json, verification_json, ai_assisted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      categories_json, alternatives_json, references_json, related_words, verification_json, ai_assisted)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       seed.slug ?? word.toLowerCase(),
       word,
@@ -59,6 +61,8 @@ export async function insertWord(seed: WordSeed = {}): Promise<number> {
       seed.updated_at ?? "2026-09-01 00:00:00",
       seed.categories_json ?? "[]",
       seed.alternatives_json ?? "[]",
+      seed.references_json ?? "[]",
+      seed.related_words ?? "[]",
       seed.verification_json ?? "{}",
       seed.ai_assisted ?? 0,
     ]

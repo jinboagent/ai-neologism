@@ -78,13 +78,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
 
   // Arrays only, matching POST — and run through the same sanitisers (finding #1/#3:
   // unbounded items and javascript: URLs used to slip through here). A field that is
-  // absent from the body keeps its stored value.
-  const listOrCurrent = <T,>(v: unknown, current: string, sanitize: (raw: unknown) => T[], currentParse: string): T[] =>
-    v !== undefined ? sanitize(v) : parseJsonColumn<T[]>(currentParse ?? current, []);
-  const nextAlternatives = listOrCurrent(body.alternatives, row.alternatives_json, sanitizeAlternatives, "[]");
-  const nextReferences = listOrCurrent(body.references, row.references_json, sanitizeReferences, "[]");
-  const nextRelated = listOrCurrent(body.related_words, row.related_words, sanitizeSlugList, "[]");
-  const nextCategories = listOrCurrent(body.categories, row.categories_json, (raw) => sanitizeCategories(raw, CATEGORIES), "[]");
+  // absent from the body keeps its stored value (a 2026-11-06 QA pass caught the
+  // previous version always parsing a literal "[]" here, wiping stored arrays).
+  const listOrCurrent = <T,>(v: unknown, current: string, sanitize: (raw: unknown) => T[]): T[] =>
+    v !== undefined ? sanitize(v) : parseJsonColumn<T[]>(current, []);
+  const nextAlternatives = listOrCurrent(body.alternatives, row.alternatives_json, sanitizeAlternatives);
+  const nextReferences = listOrCurrent(body.references, row.references_json, sanitizeReferences);
+  const nextRelated = listOrCurrent(body.related_words, row.related_words, sanitizeSlugList);
+  const nextCategories = listOrCurrent(body.categories, row.categories_json, (raw) => sanitizeCategories(raw, CATEGORIES));
 
   await qRun(
     "INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, ?, ?, ?)",

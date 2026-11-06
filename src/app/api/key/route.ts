@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canReview, issueKey, KEY_COOKIE, keyRecord, REVIEW_THRESHOLD, resolveKeyHash } from "@/lib/keys";
+import { rateLimit, voterFingerprint } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,16 @@ export async function GET(req: Request) {
   });
 }
 
-/** Issue a fresh contribution key (browser cookie is set; the key is returned once). */
-export async function POST() {
+/**
+ * Issue a fresh contribution key (browser cookie is set; the key is returned once).
+ * Rate-limited per IP+UA fingerprint: keys are otherwise free to mint, and every
+ * submission made with one costs a server-side novelty search — an unminted flood
+ * of keys would bypass the per-key submission caps entirely (2026-11-06 QA pass).
+ */
+export async function POST(req = new Request("http://localhost/api/key")) {
+  if (!rateLimit(`keymint:${voterFingerprint(req)}`, 10, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
+  }
   const { key } = await issueKey();
   const res = NextResponse.json({ key, message: "Save this key somewhere safe — it is shown only once. Lost key = lost standing." }, { status: 201 });
   res.cookies.set(KEY_COOKIE, key, {

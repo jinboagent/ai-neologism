@@ -355,3 +355,77 @@ describe("PUT /api/words/[slug] · rate limiting", () => {
     expect(statuses[30]).toBe(429);
   });
 });
+
+describe("PUT /api/words/[slug] · partial edit keeps stored arrays", () => {
+  let owner: string;
+
+  beforeEach(async () => {
+    owner = await makeKey(0);
+  });
+
+  async function seedWithArrays(): Promise<void> {
+    await insertWord({
+      slug: "pub",
+      word: "pub",
+      status: "published",
+      contributor_key_hash: hashKey(owner),
+      alternatives_json: JSON.stringify([{ word: "storedalt", rationale: "kept from before" }]),
+      references_json: JSON.stringify([{ type: "academic", title: "Stored paper", url: "https://example.com/paper" }]),
+      related_words: JSON.stringify(["storedfriend"]),
+      categories_json: JSON.stringify(["Technology & AI"]),
+    });
+  }
+
+  it("keeps every stored array when the body carries only a definition", async () => {
+    // Regression (2026-11-06 QA pass): listOrCurrent was handed a hardcoded "[]"
+    // fallback, so any partial PUT silently erased references, alternatives,
+    // related_words and categories — irreversibly, since revisions do not snapshot them.
+    await seedWithArrays();
+
+    const res = await PUT(put("pub", { definition: GOOD_DEFINITION }, owner), ctx("pub"));
+    expect(res.status).toBe(200);
+
+    const row = (await fetchWordRow("pub"))!;
+    expect(JSON.parse(row.alternatives_json)).toEqual([{ word: "storedalt", rationale: "kept from before" }]);
+    expect(JSON.parse(row.references_json)).toEqual([
+      { type: "academic", title: "Stored paper", url: "https://example.com/paper" },
+    ]);
+    expect(JSON.parse(row.related_words)).toEqual(["storedfriend"]);
+    expect(JSON.parse(row.categories_json)).toEqual(["Technology & AI"]);
+  });
+
+  it("still replaces a stored array when the body explicitly provides one", async () => {
+    await seedWithArrays();
+
+    const res = await PUT(
+      put(
+        "pub",
+        {
+          definition: GOOD_DEFINITION,
+          references: [{ type: "news", title: "New citation", url: "https://example.com/news" }],
+        },
+        owner
+      ),
+      ctx("pub")
+    );
+    expect(res.status).toBe(200);
+
+    const row = (await fetchWordRow("pub"))!;
+    expect(JSON.parse(row.references_json)).toEqual([{ type: "news", title: "New citation", url: "https://example.com/news" }]);
+    // Untouched arrays survive alongside the replaced one.
+    expect(JSON.parse(row.alternatives_json)).toEqual([{ word: "storedalt", rationale: "kept from before" }]);
+  });
+
+  it("keeps stored arrays when the body explicitly sends an empty definition only via other text fields", async () => {
+    // A body with no array keys at all — the common "fix a typo in the explanation" edit.
+    await seedWithArrays();
+
+    const res = await PUT(put("pub", { explanation: "A better explanation." }, owner), ctx("pub"));
+    expect(res.status).toBe(200);
+
+    const row = (await fetchWordRow("pub"))!;
+    expect(row.explanation).toBe("A better explanation.");
+    expect(JSON.parse(row.categories_json)).toEqual(["Technology & AI"]);
+    expect(JSON.parse(row.references_json)).toHaveLength(1);
+  });
+});

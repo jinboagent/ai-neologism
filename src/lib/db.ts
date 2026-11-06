@@ -10,9 +10,7 @@ import path from "node:path";
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "ai-neologism.db");
 
 declare global {
-  // eslint-disable-next-line no-var
   var __neologismDb: Client | undefined;
-  // eslint-disable-next-line no-var
   var __neologismSchema: Promise<void> | undefined;
 }
 

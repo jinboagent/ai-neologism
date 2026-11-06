@@ -10,7 +10,6 @@ import {
   sanitizeCategories,
   sanitizeReferences,
   sanitizeSlugList,
-  sanitizeVerification,
 } from "@/lib/sanitize";
 import { countPublished, hydrate, LIMITS, listPublished, slugify, toPublic, type Reference } from "@/lib/words";
 

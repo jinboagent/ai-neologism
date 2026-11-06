@@ -1,4 +1,4 @@
-import { qAll, qGet, qRun, withTx } from "./db";
+import { qAll, qGet, withTx } from "./db";
 import type { Client } from "@libsql/client";
 import { canReview } from "./keys";
 
@@ -75,13 +75,24 @@ export function parseJsonColumn<T>(json: string, fallback: T): T {
 }
 
 export function hydrate(row: WordRow): Word {
+  // Destructure the raw columns out — spreading the whole row used to leak the
+  // *_json duplicates into every API response alongside the parsed fields
+  // (spreads bypass excess-property checks, so the declared Word type hid it).
+  const {
+    alternatives_json,
+    verification_json,
+    references_json,
+    related_words: relatedWordsJson,
+    categories_json,
+    ...rest
+  } = row;
   return {
-    ...row,
-    alternatives: parseJsonColumn<Alternative[]>(row.alternatives_json, []),
-    verification: parseJsonColumn<Verification>(row.verification_json, { verdict: "UNVERIFIED" }),
-    references: parseJsonColumn<Reference[]>(row.references_json, []),
-    related_words: parseJsonColumn<string[]>(row.related_words, []),
-    categories: parseJsonColumn<string[]>(row.categories_json, []),
+    ...rest,
+    alternatives: parseJsonColumn<Alternative[]>(alternatives_json, []),
+    verification: parseJsonColumn<Verification>(verification_json, { verdict: "UNVERIFIED" }),
+    references: parseJsonColumn<Reference[]>(references_json, []),
+    related_words: parseJsonColumn<string[]>(relatedWordsJson, []),
+    categories: parseJsonColumn<string[]>(categories_json, []),
     ai_assisted: row.ai_assisted === 1,
   };
 }

@@ -57,8 +57,12 @@ export default function SeedsPage() {
     }
   }, []);
 
+  // IIFE so the linter can see the awaits inside load() — calling it directly
+  // trips react-hooks/set-state-in-effect (it cannot trace the await barrier).
   useEffect(() => {
-    load();
+    (async () => {
+      await load();
+    })();
   }, [load]);
 
   async function addSeed(e: React.FormEvent) {
