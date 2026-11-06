@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { coinDaily } from "@/lib/autocoin";
 
 export const dynamic = "force-dynamic";
+// Vercel serverless default is 10s — a multi-word coinage run (fetch + AI +
+// search per word) needs the Hobby plan's 60s ceiling.
+export const maxDuration = 60;
 
 /**
  * Daily auto-coin trigger. Called by a scheduler (Vercel Cron sends GET and, when
