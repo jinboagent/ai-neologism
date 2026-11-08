@@ -12,13 +12,32 @@ import { getWord } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
+// Meta descriptions read best under ~160 characters; cut on a word boundary
+// rather than mid-word, and never shorten below that if no space is found.
+function metaDescription(text: string): string {
+  if (text.length <= 160) return text;
+  const slice = text.slice(0, 157);
+  const space = slice.lastIndexOf(" ");
+  return `${space > 100 ? slice.slice(0, space) : slice}…`;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const jar = await cookies();
   const cookieKey = jar.get(KEY_COOKIE)?.value;
   const word = await getWord(slug, cookieKey ? hashKey(cookieKey) : null);
-  if (!word) return { title: "Word not found" };
-  return { title: word.word, description: word.definition };
+  if (!word) return { title: "Word not found", robots: { index: false } };
+  return {
+    title: word.word,
+    description: metaDescription(word.definition),
+    alternates: { canonical: `/words/${slug}` },
+    openGraph: {
+      type: "website",
+      url: `/words/${slug}`,
+      title: word.word,
+      description: metaDescription(word.definition),
+    },
+  };
 }
 
 const REF_LABEL: Record<string, string> = {

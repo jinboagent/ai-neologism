@@ -3,6 +3,7 @@ import { Atkinson_Hyperlegible, Source_Serif_4 } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { SearchBox } from "@/components/search-box";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const atkinson = Atkinson_Hyperlegible({
   subsets: ["latin"],
@@ -16,12 +17,23 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "AI Neologism — a dictionary of words that don't exist yet",
     template: "%s · AI Neologism",
   },
   description:
     "A curated public dictionary where AI coins new English words for emerging social phenomena, novelty is search-verified, and the community votes on adoption.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    url: "/",
+    title: "AI Neologism — a dictionary of words that don't exist yet",
+    description:
+      "A curated public dictionary where AI coins new English words for emerging social phenomena, novelty is search-verified, and the community votes on adoption.",
+  },
+  twitter: { card: "summary" },
 };
 
 const NAV = [
@@ -72,6 +84,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               can&apos;t name yet.
             </span>
             <span>Entries planned under CC BY-SA 4.0</span>
+            <Link href="/criteria" className="hover:text-primary">
+              Review criteria
+            </Link>
             <Link href="/about" className="hover:text-primary">
               Methodology &amp; API
             </Link>
