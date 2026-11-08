@@ -93,39 +93,13 @@ export default function AboutPage() {
         <section>
           <h2 className="text-xl font-bold">API</h2>
           <p className="mt-2">
-            The whole collection is programmable — the same structured schema the word pages render. Submissions via
-            API enter the same review queue as web submissions (the API is a doorway, not a bypass).
+            The whole collection is programmable — the same structured schema the word pages render. The full API
+            reference lives on the{" "}
+            <Link href="/contribute" className="text-primary hover:underline">
+              contribute page
+            </Link>{" "}
+            under <em>Via API</em>, alongside the other ways to contribute.
           </p>
-          <table className="mt-3 w-full text-sm">
-            <thead>
-              <tr className="text-left text-muted-foreground">
-                <th className="pr-4 font-medium">Method &amp; path</th>
-                <th className="font-medium">Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ["GET /api/words", "list published words (page, limit)"],
-                ["POST /api/words", "submit a word package (X-Contribution-Key header; returns 202 in_review; a new key is issued if absent). API submissions are reviewed by the admin alone — add an optional contact_email to be notified of the decision"],
-                ["GET /api/words/{slug}", "one full structured entry"],
-                ["PUT /api/words/{slug}", "edit (owner or reviewer); returned words re-enter the queue"],
-                ["GET /api/words/{slug}/revisions", "revision history"],
-                ["GET /api/search?q=", "full-text search"],
-                ["GET /api/popularity?lens=trending|endorsed|contested|verified", "popularity lenses"],
-                ["POST /api/words/{slug}/vote", "vote {vote: 1 | -1} (rate-limited)"],
-                ["POST /api/coin/candidates", "{text | url} → AI candidate words"],
-                ["POST /api/coin/verify", "{word, definition} → novelty verdict + evidence"],
-                ["GET /api/key", "your key status (accepted words, review rights)"],
-                ["GET /api/review · POST /api/review", "review queue & decisions (review rights required)"],
-                ["POST /api/cron/coin", "daily auto-coiner: coins up to AUTO_COIN_COUNT words from seeds + feeds into the review queue (CRON_SECRET-protected in production)"],
-              ].map(([route, purpose]) => (
-                <tr key={route} className="border-t border-border/60">
-                  <td className="py-1.5 pr-4 font-mono text-xs">{route}</td>
-                  <td className="py-1.5">{purpose}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </section>
 
         <section>

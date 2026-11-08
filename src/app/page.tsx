@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CoinAi } from "@/components/coin-ai";
 import { SearchBox } from "@/components/search-box";
 import { WordTable } from "@/components/word-table";
 import { CATEGORIES } from "@/lib/categories";
@@ -47,6 +48,24 @@ export default async function HomePage() {
               </span>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Coin with AI — the flagship interaction, directly under the hero so a
+          visitor can coin a word without digging through the contribute page. */}
+      <section className="mx-auto max-w-6xl px-4 pt-6">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold">Coin with AI</h2>
+          <Link href="/contribute" className="text-sm text-primary hover:underline">
+            Other ways to contribute →
+          </Link>
+        </div>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Paste an article or a link describing a phenomenon — the AI proposes candidate words, you refine one, the
+          novelty check runs, and it enters the review queue.
+        </p>
+        <div className="mt-4 rounded-xl border border-border bg-card p-5">
+          <CoinAi />
         </div>
       </section>
 
