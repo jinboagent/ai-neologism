@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { aiConfigured, fetchUrlContent, generateCandidates } from "@/lib/ai";
+import { aiConfigured, assessCoiningIntent, fetchUrlContent, generateCandidates } from "@/lib/ai";
 import { rateLimit, voterFingerprint } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
@@ -44,8 +44,27 @@ export async function POST(req: Request) {
     );
   }
 
+  // Intent gate (2026-11-08): one cheap LLM call judges whether the material
+  // actually centers on a nameable social phenomenon with enough substance to
+  // coin from. A "no" returns actionable feedback instead of burning the
+  // generation call on junk. The gate fails OPEN — if it errors or returns an
+  // unreadable verdict we proceed exactly as before (the novelty check and
+  // human review still gate downstream output); only a clean "no" blocks.
+  let assessment: Awaited<ReturnType<typeof assessCoiningIntent>> | null = null;
   try {
-    const candidates = await generateCandidates(material);
+    assessment = await assessCoiningIntent(material);
+  } catch {
+    assessment = null; // gate unavailable — do not block the visitor on it
+  }
+  if (assessment && !assessment.proceed) {
+    return NextResponse.json(
+      { error: "INTENT_REJECTED", message: assessment.reason, material_preview: material.slice(0, 200) },
+      { status: 422 }
+    );
+  }
+
+  try {
+    const candidates = await generateCandidates(material, assessment?.phenomenon ?? undefined);
     return NextResponse.json({ candidates, material_preview: material.slice(0, 200) });
   } catch (e) {
     const code = e instanceof Error ? e.message : "AI_FAILED";

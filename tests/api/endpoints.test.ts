@@ -387,3 +387,102 @@ describe("search adapter wiring", () => {
     expect(body.verification.verdict).toBe("EXISTS");
   });
 });
+
+describe("POST /api/coin/candidates · intent gate", () => {
+  const MATERIAL =
+    "Across office jobs, people describe seeing a notification banner and postponing it for hours — the task itself is trivial, yet the avoidance feels endless.";
+  const CANDIDATES = JSON.stringify([
+    {
+      word: "notifdread",
+      pronunciation: "/ˈnɒtɪfdrɛd/",
+      etymology: "notification + dread",
+      rationale: "names the postponed-open feeling",
+      suggested_definition: "The dread of opening an avoided notification.",
+      related_concepts: ["procrastination"],
+      categories: ["Technology & AI"],
+    },
+  ]);
+
+  /**
+   * The route makes two AI calls in order: the intent gate (its system prompt
+   * contains "intent gate"), then — only on a pass — candidate generation.
+   * This router answers each with its own scripted content.
+   */
+  function twoStepAi(gateContent: string, genContent: string, opts: { gateThrows?: boolean } = {}) {
+    const { calls } = mockFetch({
+      other: (url, init) => {
+        const body = typeof init?.body === "string" ? init.body : "";
+        if (body.includes("intent gate")) {
+          if (opts.gateThrows) throw new Error("gate down");
+          return new Response(JSON.stringify({ choices: [{ message: { content: gateContent } }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { content: genContent } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    });
+    return calls;
+  }
+
+  async function post(body: unknown) {
+    process.env.AI_API_KEY = "sk-test";
+    vi.resetModules();
+    const { POST } = await import("@/app/api/coin/candidates/route");
+    return POST(jsonRequest("http://localhost/api/coin/candidates", body, headers()));
+  }
+
+  it("rejects material the gate judges uncoinable — 422, and no generation call is made", async () => {
+    const calls = twoStepAi(
+      JSON.stringify({
+        proceed: false,
+        phenomenon: null,
+        reason: "This reads as a product spec sheet — paste an article about the human behavior around the product.",
+      }),
+      CANDIDATES
+    );
+
+    const res = await post({ text: MATERIAL });
+    expect(res.status).toBe(422);
+    const data = await res.json();
+    expect(data.error).toBe("INTENT_REJECTED");
+    expect(data.message).toContain("product spec");
+    expect(calls).toHaveLength(1); // gate only — the generation call never happened
+  });
+
+  it("lets a coinable request through and feeds the gate's phenomenon into the generation prompt", async () => {
+    const calls = twoStepAi(
+      JSON.stringify({ proceed: true, phenomenon: "postponing the opening of trivial notifications", reason: "" }),
+      CANDIDATES
+    );
+
+    const res = await post({ text: MATERIAL });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.candidates).toHaveLength(1);
+    expect(data.candidates[0].word).toBe("notifdread");
+    const genBody = calls.find((c) => !c.body?.includes("intent gate"))?.body ?? "";
+    expect(genBody).toContain("postponing the opening of trivial notifications");
+  });
+
+  it("fails open when the gate returns an unreadable verdict", async () => {
+    const calls = twoStepAi("Sure, this looks coinable to me!", CANDIDATES);
+
+    const res = await post({ text: MATERIAL });
+    expect(res.status).toBe(200);
+    expect((await res.json()).candidates).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("fails open when the gate call itself errors", async () => {
+    const calls = twoStepAi("", CANDIDATES, { gateThrows: true });
+
+    const res = await post({ text: MATERIAL });
+    expect(res.status).toBe(200);
+    expect((await res.json()).candidates).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+  });
+});

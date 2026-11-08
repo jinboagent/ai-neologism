@@ -19,6 +19,7 @@ Each feature file records:
 
 | Date | Feature | File |
 |---|---|---|
+| 2026-11-08 | Coin-with-AI intent gate (hard quality gate on /api/coin/candidates) | [2026-11-08-coin-intent-gate.md](./2026-11-08-coin-intent-gate.md) |
 | 2026-11-08 | Contribution hub (API docs on /contribute) + Coin-with-AI on the homepage | [2026-11-08-contribution-hub-and-homepage-coin-ai.md](./2026-11-08-contribution-hub-and-homepage-coin-ai.md) |
 
 Earlier features (pre-folder) to backfill as needed: v1 wiki + submission

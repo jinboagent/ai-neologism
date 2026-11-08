@@ -421,3 +421,71 @@ describe("fetchUrlContent · content extraction", () => {
     await expect(fetchUrlContent("https://example.com")).resolves.toBe("");
   });
 });
+
+describe("assessCoiningIntent · the intent gate", () => {
+  it("throws AI_NOT_CONFIGURED when no key is set, without calling the network", async () => {
+    const { calls } = mockFetch(aiReply('{"proceed":true}'));
+    const { assessCoiningIntent } = await loadAi({});
+
+    await expect(assessCoiningIntent("some material")).rejects.toThrow("AI_NOT_CONFIGURED");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("parses a proceed verdict and carries the phenomenon summary", async () => {
+    mockFetch(aiReply('{"proceed": true, "phenomenon": "checking notifications without reading them", "reason": ""}'));
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    const out = await assessCoiningIntent("material about notification avoidance");
+    expect(out).toEqual({ proceed: true, reason: "", phenomenon: "checking notifications without reading them" });
+  });
+
+  it("parses a reject verdict with its feedback", async () => {
+    mockFetch(aiReply('{"proceed": false, "phenomenon": null, "reason": "This is a product spec — paste an article about the human behavior around it."}'));
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    const out = await assessCoiningIntent("material that is a product spec");
+    expect(out.proceed).toBe(false);
+    expect(out.reason).toContain("product spec");
+    expect(out.phenomenon).toBeNull();
+  });
+
+  it("supplies a default reason when the model rejects with an empty one", async () => {
+    mockFetch(aiReply('{"proceed": false, "phenomenon": null, "reason": ""}'));
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    const out = await assessCoiningIntent("material");
+    expect(out.proceed).toBe(false);
+    expect(out.reason).toContain("does not look like something to coin a word from");
+  });
+
+  it("strips markdown fences around the verdict", async () => {
+    mockFetch(aiReply("```json\n" + '{"proceed": true, "phenomenon": "grief posting cycles", "reason": ""}' + "\n```"));
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    const out = await assessCoiningIntent("material");
+    expect(out.proceed).toBe(true);
+    expect(out.phenomenon).toBe("grief posting cycles");
+  });
+
+  it("throws AI_BAD_FORMAT on an unreadable verdict — the route fail-opens on this", async () => {
+    mockFetch(aiReply("I think this material is fine, please proceed."));
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    await expect(assessCoiningIntent("material")).rejects.toThrow("AI_BAD_FORMAT");
+  });
+
+  it("propagates transport errors — the route fail-opens on this too", async () => {
+    mockFetch({ other: () => { throw new Error("gate down"); } });
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    await expect(assessCoiningIntent("material")).rejects.toThrow("gate down");
+  });
+
+  it("returns null phenomenon when the model omits it on a pass", async () => {
+    mockFetch(aiReply('{"proceed": true}'));
+    const { assessCoiningIntent } = await loadAi({ AI_API_KEY: "sk-test" });
+
+    const out = await assessCoiningIntent("material");
+    expect(out).toEqual({ proceed: true, reason: "", phenomenon: null });
+  });
+});
