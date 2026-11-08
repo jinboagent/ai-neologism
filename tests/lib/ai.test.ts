@@ -327,6 +327,23 @@ describe("fetchUrlContent · redirects", () => {
     expect(calls.some((c) => c.url.includes("169.254.169.254"))).toBe(false);
   });
 
+  it("re-checks the resolved IP on every redirect hop (F1)", async () => {
+    // The hop's hostname string-passes the target check; only the DNS
+    // resolution reveals it. Regression: redirect hops ran assertSafeTarget
+    // only, so a rebinding domain could bounce the fetch into a private
+    // address and leak its response through material_preview.
+    const { calls } = mockFetch({
+      other: (url) =>
+        url.includes("public.example")
+          ? new Response("", { status: 302, headers: { Location: "http://rebind.private.example/secret" } })
+          : new Response("internal body", { status: 200 }),
+    });
+    const { fetchUrlContent } = await loadAi({});
+
+    await expect(fetchUrlContent("https://public.example/article")).rejects.toThrow("BAD_URL");
+    expect(calls.some((c) => c.url.includes("rebind.private.example/secret"))).toBe(false);
+  });
+
   it("refuses a redirect to localhost", async () => {
     const { calls } = mockFetch({
       other: (url) =>

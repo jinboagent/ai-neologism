@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const keyHash = await resolveKeyHash(req);
   if (!keyHash) return NextResponse.json({ error: "NO_KEY" }, { status: 401 });
-  if (!rateLimit(`edit:${keyHash}`, 30, 60 * 60 * 1000)) {
+  if (!(await rateLimit(`edit:${keyHash}`, 30, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
 

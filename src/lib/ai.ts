@@ -296,6 +296,7 @@ export async function fetchUrlContent(url: string): Promise<string> {
           throw new Error("BAD_URL");
         }
         assertSafeTarget(target);
+        await assertResolvedSafe(target); // every hop re-checks the resolved IP (F1: DNS rebinding via redirect)
         continue;
       }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { coinDaily } from "@/lib/autocoin";
+import { safeEqual } from "@/lib/secure";
 
 export const dynamic = "force-dynamic";
 // Vercel serverless default is 10s — a multi-word coinage run (fetch + AI +
@@ -20,9 +21,9 @@ function authorized(req: Request): boolean {
   const url = new URL(req.url);
   const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   return (
-    req.headers.get("x-cron-secret") === secret ||
-    url.searchParams.get("secret") === secret ||
-    (bearer !== "" && bearer === secret)
+    safeEqual(req.headers.get("x-cron-secret") ?? "", secret) ||
+    safeEqual(url.searchParams.get("secret") ?? "", secret) ||
+    (bearer !== "" && safeEqual(bearer, secret))
   );
 }
 

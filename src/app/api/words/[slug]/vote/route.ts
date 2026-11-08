@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const fingerprint = voterFingerprint(req);
-  if (!rateLimit(`vote:${fingerprint}`, 20, 60 * 1000)) {
+  if (!(await rateLimit(`vote:${fingerprint}`, 20, 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many votes; slow down." }, { status: 429 });
   }
   let body: { vote?: unknown };

@@ -25,7 +25,7 @@ export async function GET(req: Request) {
  * of keys would bypass the per-key submission caps entirely (2026-11-06 QA pass).
  */
 export async function POST(req = new Request("http://localhost/api/key")) {
-  if (!rateLimit(`keymint:${voterFingerprint(req)}`, 10, 60 * 60 * 1000)) {
+  if (!(await rateLimit(`keymint:${voterFingerprint(req)}`, 10, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
   const { key } = await issueKey();
@@ -33,6 +33,7 @@ export async function POST(req = new Request("http://localhost/api/key")) {
   res.cookies.set(KEY_COOKIE, key, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production", // bearer token — never send over plaintext (F5)
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });

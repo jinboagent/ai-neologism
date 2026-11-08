@@ -13,8 +13,19 @@ export function adminConfigured(): boolean {
   return !!process.env.ADMIN_USERNAME && !!process.env.ADMIN_PASSWORD;
 }
 
+// Dedicated session-signing key when provided (rotate it independently of the
+// password); falls back to ADMIN_PASSWORD. Either way the key is never "" —
+// sign() refuses to mint tokens without secret material, and isAdmin() fails
+// closed when the admin is not configured (security report F2: an unset
+// password made the HMAC key "" and every forgeable token valid).
+function sessionKey(): string {
+  return process.env.ADMIN_SECRET ?? process.env.ADMIN_PASSWORD ?? "";
+}
+
 function sign(exp: number): string {
-  return crypto.createHmac("sha256", process.env.ADMIN_PASSWORD ?? "").update(`admin:${exp}`).digest("hex");
+  const key = sessionKey();
+  if (!key) throw new Error("admin session key not configured");
+  return crypto.createHmac("sha256", key).update(`admin:${exp}`).digest("hex");
 }
 
 export function createToken(): string {
@@ -44,8 +55,11 @@ export function checkCredentials(username: string, password: string): boolean {
   return userOk && passOk;
 }
 
-/** Whether the current request carries a valid admin session cookie. */
+/** Whether the current request carries a valid admin session cookie.
+ * Fails closed: without configured credentials there are no valid sessions at
+ * all, so an empty-key HMAC can never pass (security report F2). */
 export async function isAdmin(): Promise<boolean> {
+  if (!adminConfigured()) return false;
   try {
     const jar = await cookies();
     return verifyToken(jar.get(ADMIN_COOKIE)?.value);

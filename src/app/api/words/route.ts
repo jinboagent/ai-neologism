@@ -131,7 +131,7 @@ export async function POST(req: Request) {
     keyHash = issued.keyHash;
     newKey = issued.key;
   }
-  if (!rateLimit(`submit:${keyHash}`, 10, 60 * 60 * 1000)) {
+  if (!(await rateLimit(`submit:${keyHash}`, 10, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many submissions this hour." }, { status: 429 });
   }
 

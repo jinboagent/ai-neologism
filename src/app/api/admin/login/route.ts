@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       { status: 503 }
     );
   }
-  if (!rateLimit(`adminlogin:${voterFingerprint(req)}`, 10, 15 * 60 * 1000)) {
+  if (!(await rateLimit(`adminlogin:${voterFingerprint(req)}`, 10, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many attempts; wait a few minutes." }, { status: 429 });
   }
 

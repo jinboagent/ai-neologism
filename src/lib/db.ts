@@ -123,6 +123,12 @@ const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_votes_word ON votes(word_id)`,
   `CREATE INDEX IF NOT EXISTS idx_votes_created ON votes(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_seeds_key ON seeds(contributor_key_hash)`,
+  `CREATE TABLE IF NOT EXISTS rate_limits (
+      identity TEXT NOT NULL,
+      window_start INTEGER NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (identity, window_start)
+    )`,
 ];
 
 /** Create the schema once per process. Safe to call concurrently and repeatedly. */

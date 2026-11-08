@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     keyHash = issued.keyHash;
     newKey = issued.key;
   }
-  if (!rateLimit(`seeds:${keyHash}`, 30, 60 * 60 * 1000)) {
+  if (!(await rateLimit(`seeds:${keyHash}`, 30, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many seeds added this hour." }, { status: 429 });
   }
 

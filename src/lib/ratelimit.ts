@@ -1,52 +1,53 @@
-// Simple fixed-window in-memory rate limiter (per process — fine for v1 scale).
+// Fixed-window rate limiter backed by the shared database (the local file DB in
+// development, Turso in production). A process-local Map cannot work on
+// serverless: every lambda instance keeps its own buckets and cold starts reset
+// them, so any parallelism bypasses the cap entirely (security report F3). The
+// database is shared by every instance, which makes the counters global.
+//
+// Fail-closed: if the limiter cannot reach the database, requests are denied —
+// a limiter that fails open is not a limiter.
 
 import crypto from "node:crypto";
+import { ensureSchema, getDb } from "./db";
 
-type Bucket = { count: number; resetAt: number };
+// Abandoned identities are swept on every SWEEP_EVERY-th call so the table
+// stays bounded even under a flood of unique fingerprints. The longest window
+// in use is one hour, so a 24h cutoff is generous.
+const SWEEP_EVERY = 1000;
+const SWEEP_CUTOFF_MS = 24 * 60 * 60 * 1000;
+let callsSinceSweep = 0;
 
-const buckets = new Map<string, Bucket>();
-
-// Identities are IP+UA fingerprints, so the map gains an entry for every distinct
-// visitor. Sweep expired buckets at most once per interval and hard-cap the map so
-// a flood of unique identities cannot grow it without bound.
-const MAX_BUCKETS = 10_000;
-const SWEEP_INTERVAL_MS = 60_000;
-let lastSweepAt = 0;
-
-function sweepExpired(now: number): void {
-  if (now - lastSweepAt < SWEEP_INTERVAL_MS) return;
-  lastSweepAt = now;
-  for (const [identity, bucket] of buckets) {
-    if (now > bucket.resetAt) buckets.delete(identity);
-  }
-}
-
-export function rateLimit(identity: string, limit: number, windowMs: number): boolean {
+export async function rateLimit(identity: string, limit: number, windowMs: number): Promise<boolean> {
   if (!Number.isFinite(limit) || limit < 1) return false;
 
-  const now = Date.now();
-  if (buckets.size >= MAX_BUCKETS) {
-    sweepExpired(now);
-    // Still full: every window is live. Drop the oldest to keep memory bounded.
-    if (buckets.size >= MAX_BUCKETS) {
-      const oldest = buckets.keys().next();
-      if (!oldest.done) buckets.delete(oldest.value);
+  const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
+  try {
+    await ensureSchema();
+    const db = getDb();
+    // Drop this identity's lapsed windows — one row per identity per window.
+    await db.execute({
+      sql: "DELETE FROM rate_limits WHERE identity = ? AND window_start < ?",
+      args: [identity, windowStart],
+    });
+    const res = await db.execute({
+      sql: `INSERT INTO rate_limits (identity, window_start, count) VALUES (?, ?, 1)
+            ON CONFLICT(identity, window_start) DO UPDATE SET count = count + 1
+            RETURNING count`,
+      args: [identity, windowStart],
+    });
+    const count = Number(res.rows[0]?.count ?? 0);
+
+    if (++callsSinceSweep >= SWEEP_EVERY) {
+      callsSinceSweep = 0;
+      await db.execute({
+        sql: "DELETE FROM rate_limits WHERE window_start < ?",
+        args: [Date.now() - SWEEP_CUTOFF_MS],
+      });
     }
+    return count <= limit;
+  } catch {
+    return false; // fail-closed (F3)
   }
-
-  const bucket = buckets.get(identity);
-  if (!bucket || now > bucket.resetAt) {
-    buckets.set(identity, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (bucket.count >= limit) return false;
-  bucket.count += 1;
-  return true;
-}
-
-/** Live bucket count — exposed so unbounded growth is observable rather than silent. */
-export function bucketCount(): number {
-  return buckets.size;
 }
 
 /**
