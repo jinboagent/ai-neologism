@@ -54,6 +54,13 @@ export default function AboutPage() {
             <li>Must name a real, identifiable phenomenon.</li>
             <li>AI-coined words always propose an IPA pronunciation, and place themselves among related entries where meaningful relations exist.</li>
           </ul>
+          <p className="mt-2 text-muted-foreground">
+            The full bar — all three gates, including the fusion rule — is on the{" "}
+            <Link href="/criteria" className="text-primary hover:underline">
+              review criteria page
+            </Link>
+            .
+          </p>
         </section>
 
         <section>

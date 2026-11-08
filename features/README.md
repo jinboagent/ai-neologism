@@ -21,6 +21,7 @@ Each feature file records:
 |---|---|---|
 | 2026-11-08 | Coin-with-AI intent gate (hard quality gate on /api/coin/candidates) | [2026-11-08-coin-intent-gate.md](./2026-11-08-coin-intent-gate.md) |
 | 2026-11-08 | Contribution hub (API docs on /contribute) + Coin-with-AI on the homepage | [2026-11-08-contribution-hub-and-homepage-coin-ai.md](./2026-11-08-contribution-hub-and-homepage-coin-ai.md) |
+| 2026-11-08 | Public review-criteria page (/criteria) — visitor-facing statement of the approval bar | [2026-11-08-public-review-criteria-page.md](./2026-11-08-public-review-criteria-page.md) |
 
 Earlier features (pre-folder) to backfill as needed: v1 wiki + submission
 pipeline, seed queue, auto-coiner, admin gate & one-click approval, admin
