@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -46,3 +47,6 @@ next-env.d.ts
 # internal working documents & review lists — local only
 /docs/
 /wordstoreview/
+
+# personal self-use tooling (PC-side scripts) — local only, never committed
+/local/
