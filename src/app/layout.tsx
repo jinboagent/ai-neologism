@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible, Source_Serif_4 } from "next/font/google";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { SearchBox } from "@/components/search-box";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
@@ -55,7 +56,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-card focus:px-3 focus:py-2 focus:rounded focus:border focus:border-border"
         >
-          Skip to main content
         </a>
         <header className="border-b border-border bg-card">
           <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -77,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main id="main" className="flex-1">
           {children}
         </main>
+        <Analytics />
         <footer className="border-t border-border bg-card mt-16">
           <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-muted-foreground flex flex-wrap gap-x-8 gap-y-2 items-center">
             <span>
