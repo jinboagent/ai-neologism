@@ -173,13 +173,21 @@ for (const { n, theme } of BATCH3) {
 
 // fusion-necessity recheck deltas (2026-11-08): only these may flip an APPROVE
 const flips = parseFusionFlips(read(path.join(WSV, "review-batch-3-01-06-fusion-recheck.md")));
+// second-pass reconciliation deltas (2026-11-08): two-pass merges for 07/08,
+// verification spot-checks for 09/10 — may flip APPROVE down and REVISE→REJECT
+// (evidence beats absence; stricter-of-two, see review-batch-3-07-10-postmerge-flips.md)
+const postmerge = parseFusionFlips(read(path.join(WSV, "review-batch-3-07-10-postmerge-flips.md")));
+for (const [k, f] of postmerge) flips.set(k, f);
 const flipped = [];
 for (const [k, f] of flips) {
   const v = verdicts.get(k);
   if (!v) throw new Error(`recheck flip for unknown word: ${k}`);
-  if (v.verdict === "APPROVE" && (f.verdict === "REVISE" || f.verdict === "REJECT")) {
+  const downgrade =
+    (v.verdict === "APPROVE" && (f.verdict === "REVISE" || f.verdict === "REJECT")) ||
+    (v.verdict === "REVISE" && f.verdict === "REJECT");
+  if (downgrade) {
     v.verdict = f.verdict;
-    v.reviewFile += ` + review-batch-3-01-06-fusion-recheck.md`;
+    v.reviewFile += ` + review-batch-3-07-10-postmerge-flips.md`;
     flipped.push(`${v.word} → ${f.verdict}`);
   }
 }
