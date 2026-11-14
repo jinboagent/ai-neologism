@@ -19,7 +19,7 @@ export const en = {
   searchPlaceholder: 'Describe the phenomenon — e.g. "companies pretending to be ethical"',
   searchButton: "Search",
   footerTagline: "words for what we feel but can't name yet.",
-  footerCc: "Entries planned under CC BY-SA 4.0",
+  footerCc: "© The AI Neologism Project — all rights reserved",
   footerCriteria: "Review criteria",
   footerMethodology: "Methodology & API",
   footerAdmin: "Admin",
@@ -186,9 +186,9 @@ export const en = {
   aboutApiH: "API",
   aboutApiP:
     "The whole collection is programmable — the same structured schema the word pages render. The full API reference lives on the [[contribute page|/contribute]] under Via API, alongside the other ways to contribute.",
-  aboutLicenseH: "Licensing & credits",
+  aboutLicenseH: "Rights & credits",
   aboutLicenseP:
-    "Entries are planned to live under CC BY-SA 4.0 (final decision pending). Inspired by the craft of concept-namers everywhere, and by the W3C Neologism project's pattern of one schema for humans and machines alike.",
+    "The dictionary, its entries and its evidence logs are proprietary — all rights reserved by The AI Neologism Project, per the [[Terms of Use|/terms]]. Inspired by the craft of concept-namers everywhere, and by the W3C Neologism project's pattern of one schema for humans and machines alike.",
   aboutCoinCta: "Coin a word →",
 
   /* ---- criteria (long-form prose) ---- */

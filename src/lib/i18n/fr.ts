@@ -17,7 +17,7 @@ export const fr: Dictionary = {
   searchPlaceholder: "Décris le phénomène — p. ex. « des entreprises qui se prétendent éthiques »",
   searchButton: "Rechercher",
   footerTagline: "des mots pour ce que nous ressentons mais ne savons pas encore nommer.",
-  footerCc: "Entrées prévues sous licence CC BY-SA 4.0",
+  footerCc: "© The AI Neologism Project — tous droits réservés",
   footerCriteria: "Critères de révision",
   footerMethodology: "Méthodologie et API",
   footerAdmin: "Admin",
@@ -181,9 +181,9 @@ export const fr: Dictionary = {
   aboutApiH: "API",
   aboutApiP:
     "Toute la collection est programmable — le même schéma structuré que rendent les pages de mots. La référence API complète se trouve sur la [[page de contribution|/contribute]], sous Via API, à côté des autres façons de contribuer.",
-  aboutLicenseH: "Licence et crédits",
+  aboutLicenseH: "Droits et crédits",
   aboutLicenseP:
-    "Les entrées sont prévues sous licence CC BY-SA 4.0 (décision finale à venir). Inspiré par l'artisanat des nommeurs de concepts partout ailleurs, et par le schéma du projet Neologism du W3C : un seul modèle pour les humains et les machines.",
+    "Le dictionnaire, ses entrées et ses journaux de preuves sont propriétaires — tous droits réservés par The AI Neologism Project, conformément aux [[conditions d'utilisation|/terms]]. Inspiré par l'artisanat des nommeurs de concepts partout ailleurs, et par le schéma du projet Neologism du W3C : un seul modèle pour les humains et les machines.",
   aboutCoinCta: "Forger un mot →",
 
   /* ---- Critères (texte long) ---- */

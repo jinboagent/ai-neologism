@@ -17,7 +17,7 @@ export const de: Dictionary = {
   searchPlaceholder: "Beschreibe das Phänomen — z. B. „Firmen, die vorgeben, ethisch zu sein“",
   searchButton: "Suchen",
   footerTagline: "Wörter für das, was wir fühlen, aber noch nicht benennen können.",
-  footerCc: "Einträge unter CC BY-SA 4.0 geplant",
+  footerCc: "© The AI Neologism Project — alle Rechte vorbehalten",
   footerCriteria: "Prüfkriterien",
   footerMethodology: "Methodik & API",
   footerAdmin: "Admin",
@@ -181,9 +181,9 @@ export const de: Dictionary = {
   aboutApiH: "API",
   aboutApiP:
     "Die ganze Sammlung ist programmierbar — dasselbe strukturierte Schema, das die Wortseiten rendern. Die vollständige API-Referenz liegt auf der [[Mitprägungs-Seite|/contribute]] unter Via API, neben den anderen Wegen beizutragen.",
-  aboutLicenseH: "Lizenz & Danksagung",
+  aboutLicenseH: "Rechte & Danksagung",
   aboutLicenseP:
-    "Die Einträge sollen unter CC BY-SA 4.0 stehen (Endentscheidung offen). Inspiriert vom Handwerk der Konzept-Benenner überall — und vom Muster des W3C-Neologism-Projekts: ein Schema für Menschen und Maschinen gleichermaßen.",
+    "Das Wörterbuch, seine Einträge und seine Belegprotokolle sind proprietär — alle Rechte vorbehalten bei The AI Neologism Project, gemäß der [[Nutzungsbedingungen|/terms]]. Inspiriert vom Handwerk der Konzept-Benenner überall — und vom Muster des W3C-Neologism-Projekts: ein Schema für Menschen und Maschinen gleichermaßen.",
   aboutCoinCta: "Ein Wort prägen →",
 
   /* ---- Kriterien (längerer Text) ---- */

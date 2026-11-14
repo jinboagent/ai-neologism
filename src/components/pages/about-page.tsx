@@ -95,7 +95,9 @@ export async function AboutPage({ locale }: { locale: Locale }) {
 
         <section>
           <h2 className="text-xl font-bold">{t.aboutLicenseH}</h2>
-          <p className="mt-2">{t.aboutLicenseP}</p>
+          <p className="mt-2">
+            <Prose locale={locale} text={t.aboutLicenseP} />
+          </p>
           <p className="mt-2">
             <Link href={localePath(locale, "/contribute") || "/contribute"} className="text-primary hover:underline">
               {t.aboutCoinCta}
