@@ -3,13 +3,14 @@ import { CoinAi } from "@/components/coin-ai";
 import { SearchBox } from "@/components/search-box";
 import { WordTable } from "@/components/word-table";
 import { CATEGORIES } from "@/lib/categories";
-import { alphabetWithCounts, countPublished, popularity } from "@/lib/words";
+import { alphabetWithCounts, countPublished, countSearchVerified, popularity } from "@/lib/words";
 import { localePath, type Locale } from "@/lib/i18n/core";
 import { getDictionary } from "@/lib/i18n";
 
 export async function HomePage({ locale }: { locale: Locale }) {
   const t = getDictionary(locale);
   const total = await countPublished(locale);
+  const verified = await countSearchVerified(locale);
   const letters = await alphabetWithCounts(locale);
   const trending = await popularity("trending", 8, locale);
   const show = trending.length > 0 ? trending : await popularity("verified", 8, locale);
@@ -54,6 +55,16 @@ export async function HomePage({ locale }: { locale: Locale }) {
             </Link>
             {total > 0 && <span className="text-sm text-muted-foreground">{t.homeCount(total)}</span>}
           </div>
+        </div>
+      </section>
+
+      {/* Trust strip: the site's credibility numbers, computed from the DB —
+          evidence logs are the differentiator, show them on first paint. */}
+      <section className="border-b border-border bg-card">
+        <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap justify-center gap-x-10 gap-y-1 text-center text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{t.homeStatWords(total)}</span>
+          <span>{t.homeStatEvidence(verified)}</span>
+          <span className="font-medium text-primary">{t.homeStatReview}</span>
         </div>
       </section>
 

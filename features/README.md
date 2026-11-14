@@ -22,6 +22,7 @@ live in the repo root: [../CONVENTIONS.md](../CONVENTIONS.md).
 
 | Date | Feature | File |
 |---|---|---|
+| 2026-11-14 | Trust & credibility layer — identity footer, legal pages, DefinedTerm, OG cards | [2026-11-14-trust-layer.md](./2026-11-14-trust-layer.md) |
 | 2026-11-14 | Games — five lexicon word games in four languages, homepage section + nav | [2026-11-14-games.md](./2026-11-14-games.md) |
 | 2026-11-14 | Multilingual phase 3 — per-language coin pipeline + pilot (30 in review) | [2026-11-14-multilingual-coin-pipeline.md](./2026-11-14-multilingual-coin-pipeline.md) |
 | 2026-11-14 | Multilingual phase 2 — i18n UI layer + style-D switcher | [2026-11-14-multilingual-i18n-ui.md](./2026-11-14-multilingual-i18n-ui.md) |

@@ -116,6 +116,20 @@ export const de: Dictionary = {
 
   /* ---- Über (längerer Text) ---- */
   aboutTitle: "Über & Methodik",
+  footerSince: "seit 2026",
+  footerExplore: "Entdecken",
+  footerParticipate: "Mitprägen",
+  footerLegal: "Rechtliches",
+  footerPrivacy: "Datenschutz",
+  footerTerms: "Nutzungsbedingungen",
+  footerImpressum: "Impressum",
+  footerContact: "Kontakt",
+  footerOpenSource: "Open Source auf GitHub",
+  homeStatWords: (n: number) => `${n} geprägte Wörter`,
+  homeStatEvidence: (n) => `${n} Einträge such-verifiziert`,
+  homeStatReview: "100% menschlich geprüft vor Veröffentlichung",
+  aboutWhoH: "Wer wir sind",
+  aboutWhoP: "AI Neologism wird von The AI Neologism Project aufgebaut und gepflegt — einem unabhängigen redaktionellen Projekt, das seit 2026 veröffentlicht. Jeder Eintrag wird mit KI-Unterstützung entworfen, gegen das Live-Web verifiziert und erst nach menschlicher Prüfung veröffentlicht. Fragen, Korrekturen und Presseanfragen: [[hello@ai-neologism.com|mailto:hello@ai-neologism.com]] — der Code ist [[Open Source auf GitHub|https://github.com/jinboagent/ai-neologism]].",
   aboutWhatH: "Was das ist",
   aboutWhatP1:
     "AI Neologism ist ein kuratiertes öffentliches Wörterbuch für Konzepte, die noch keine Namen haben. Die KI prägt Kandidatenwörter für aufkommende gesellschaftliche Phänomene, die Neuartigkeit wird vor der Veröffentlichung per Websuche verifiziert, menschliche Prüfer schichten jeden Eintrag ab, und die Community stimmt über die Aufnahme ab — ob die Leute das Wort wirklich benutzen würden.",

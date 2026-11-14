@@ -116,6 +116,20 @@ export const es: Dictionary = {
 
   /* ---- Acerca de (texto largo) ---- */
   aboutTitle: "Acerca de y metodología",
+  footerSince: "desde 2026",
+  footerExplore: "Explorar",
+  footerParticipate: "Participar",
+  footerLegal: "Legal",
+  footerPrivacy: "Privacidad",
+  footerTerms: "Términos de uso",
+  footerImpressum: "Impressum",
+  footerContact: "Contacto",
+  footerOpenSource: "Código abierto en GitHub",
+  homeStatWords: (n) => `${n} palabras acuñadas y publicadas`,
+  homeStatEvidence: (n) => `${n} entradas verificadas en la web`,
+  homeStatReview: "100% revisado por humanos antes de publicar",
+  aboutWhoH: "Quiénes somos",
+  aboutWhoP: "AI Neologism lo construye y mantiene The AI Neologism Project, un esfuerzo editorial independiente que publica desde 2026. Cada entrada se redacta con asistencia de IA, se verifica contra la web en vivo y solo se publica tras revisión humana. Preguntas, correcciones y consultas de prensa: [[hello@ai-neologism.com|mailto:hello@ai-neologism.com]] — el código es [[código abierto en GitHub|https://github.com/jinboagent/ai-neologism]].",
   aboutWhatH: "Qué es esto",
   aboutWhatP1:
     "AI Neologism es un diccionario público y curado para conceptos que aún no tienen nombre. La IA acuña palabras candidatas para fenómenos sociales emergentes, la novedad se verifica mediante búsqueda web antes de publicar, revisores humanos filtran cada entrada, y la comunidad vota la adopción — si la gente usaría de verdad la palabra.",

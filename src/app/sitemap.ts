@@ -24,6 +24,9 @@ const CHROME: { path: string; changeFrequency: MetadataRoute.Sitemap[number]["ch
   { path: "/sources", changeFrequency: "weekly", priority: 0.5 },
   { path: "/criteria", changeFrequency: "monthly", priority: 0.5 },
   { path: "/about", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/impressum", changeFrequency: "yearly", priority: 0.3 },
 ];
 const LOCALIZED = new Set(["/", "/index", "/popularity", "/games", "/criteria", "/about"]);
 

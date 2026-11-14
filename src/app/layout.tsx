@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     description:
       "A curated public dictionary where AI coins new English words for emerging social phenomena, novelty is search-verified, and the community votes on adoption.",
   },
-  twitter: { card: "summary" },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

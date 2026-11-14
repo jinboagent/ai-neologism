@@ -178,6 +178,18 @@ export async function countPublished(language?: string): Promise<number> {
   return row?.n ?? 0;
 }
 
+/** Published entries whose novelty check produced a verdict (new or
+ * near-existing) — the trust-strip number. Honest and unmisleading: it counts
+ * what the search-verified badge actually attests. */
+export async function countSearchVerified(language?: string): Promise<number> {
+  const filter = language ? "AND language = ?" : "";
+  const row = await qGet<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM words WHERE status = 'published' AND badge IN ('new', 'near_existing') ${filter}`,
+    language ? [language] : []
+  );
+  return row?.n ?? 0;
+}
+
 /** Visibility: published words are public; drafts/queue items only to their owner or a reviewer. */
 export async function getWord(slug: string, viewerKeyHash?: string | null, language?: string): Promise<Word | null> {
   const row = await qGet<WordRow>("SELECT * FROM words WHERE slug = ?", [slug]);

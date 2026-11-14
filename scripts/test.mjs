@@ -750,6 +750,23 @@ async function testMultilingual() {
     badGrammar.status === 400 && badGrammar.json?.error === "INVALID_GRAMMAR",
     `status ${badGrammar.status}`
   );
+
+  // trust layer: identity/legal pages, DefinedTerm JSON-LD, OG card
+  const privacy = await raw("/privacy");
+  ok("privacy policy page serves", privacy.status === 200 && privacy.text.includes("What we collect"), `status ${privacy.status}`);
+  const terms = await raw("/terms");
+  ok("terms page serves", terms.status === 200 && terms.text.includes("Acceptable use"), `status ${terms.status}`);
+  const impressum = await raw("/impressum");
+  ok("impressum page serves (German, placeholders until owner fills them)", impressum.status === 200 && impressum.text.includes("PLATZHALTER"), `status ${impressum.status}`);
+  const legalNoRedirect = await raw("/privacy", { headers: DE_ACCEPT, manual: true });
+  ok("legal pages never redirect", legalNoRedirect.status === 200, `status ${legalNoRedirect.status}`);
+  ok(
+    "word page carries DefinedTerm JSON-LD",
+    enWord.status === 200 && enWord.text.includes('"@type":"DefinedTerm"'),
+    "JSON-LD missing"
+  );
+  const og = await raw("/words/graywashing/opengraph-image");
+  ok("dynamic OG card renders", og.status === 200 && og.text.length > 1000, `status ${og.status}`);
 }
 
 // Games: the hub and per-game pages exist in all four locales, computed live

@@ -20,6 +20,13 @@ export async function AboutPage({ locale }: { locale: Locale }) {
       <h1 className="word-title text-3xl font-bold">{t.aboutTitle}</h1>
       <div className="reading-col mt-4 space-y-10">
         <section>
+          <h2 className="text-xl font-bold">{t.aboutWhoH}</h2>
+          <p className="mt-2">
+            <Prose locale={locale} text={t.aboutWhoP} />
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-xl font-bold">{t.aboutWhatH}</h2>
           <p className="mt-2">{t.aboutWhatP1}</p>
           <p className="mt-2">{t.aboutWhatP2}</p>

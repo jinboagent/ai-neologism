@@ -118,6 +118,20 @@ export const en = {
 
   /* ---- about (long-form prose) ---- */
   aboutTitle: "About & methodology",
+  footerSince: "since 2026",
+  footerExplore: "Explore",
+  footerParticipate: "Participate",
+  footerLegal: "Legal",
+  footerPrivacy: "Privacy Policy",
+  footerTerms: "Terms of Use",
+  footerImpressum: "Impressum",
+  footerContact: "Contact",
+  footerOpenSource: "Open source on GitHub",
+  homeStatWords: (n: number) => `${n} words coined and published`,
+  homeStatEvidence: (n: number) => `${n} entries search-verified`,
+  homeStatReview: "100% human-reviewed before publication",
+  aboutWhoH: "Who we are",
+  aboutWhoP: "AI Neologism is built and maintained by The AI Neologism Project, an independent editorial effort publishing since 2026. Every entry is drafted with AI assistance, verified against the live web, and published only after human review. Questions, corrections and press inquiries: [[hello@ai-neologism.com|mailto:hello@ai-neologism.com]] — the code is [[open source on GitHub|https://github.com/jinboagent/ai-neologism]].",
   aboutWhatH: "What this is",
   aboutWhatP1:
     "AI Neologism is a curated public dictionary for concepts that don't have names yet. AI coins candidate English words for emerging social phenomena, novelty is verified by web search before publication, human reviewers gate every entry, and the community votes on adoption — whether people would actually use the word.",

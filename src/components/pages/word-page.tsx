@@ -7,6 +7,7 @@ import { VoteWidget } from "@/components/vote-widget";
 import { isSafeHttpUrl } from "@/lib/sanitize";
 import { qAll } from "@/lib/db";
 import { hashKey } from "@/lib/keys";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 import { getWord, getWordFamily } from "@/lib/words";
 import { localePath, LOCALE_NAMES, splitLinks, type Locale } from "@/lib/i18n/core";
 import { familyAlternates } from "@/lib/i18n/meta";
@@ -79,8 +80,22 @@ export async function WordPage({ slug, locale, cookieKey }: { slug: string; loca
   const evidenceCount = v.closest_matches?.length ?? 0;
   const siblings = family.filter((f) => f.language !== locale);
 
+  // schema.org DefinedTerm: tells Google this page IS a dictionary entry —
+  // the difference between "some blog" and "a dictionary entity" in results.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "DefinedTerm",
+    name: word.word,
+    alternateName: siblings.map((f) => f.word),
+    description: word.definition,
+    termCode: word.slug,
+    url: `${SITE_URL}${localePath(locale, `/words/${word.slug}`)}`,
+    inDefinedTermSet: { "@type": "DefinedTermSet", name: SITE_NAME, url: SITE_URL },
+  };
+
   return (
     <article className="mx-auto max-w-4xl px-4 py-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       {word.status !== "published" && (
         <div className="mb-4 rounded-lg border border-warn/40 bg-warn-soft p-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -328,13 +343,18 @@ function Paragraphs({ text, className = "" }: { text: string; className?: string
   );
 }
 
-/** Renders dictionary prose that may embed [[label|href]] link tokens. */
+/** Renders dictionary prose that may embed [[label|href]] link tokens.
+ * Absolute and mailto links bypass localePath (they are not site routes). */
 export function Prose({ locale, text }: { locale: Locale; text: string }) {
   return (
     <>
       {splitLinks(text).map((seg, i) =>
         seg.kind === "text" ? (
           <span key={i}>{seg.value}</span>
+        ) : seg.href.startsWith("http") || seg.href.startsWith("mailto:") ? (
+          <a key={i} href={seg.href} className="text-primary hover:underline">
+            {seg.label}
+          </a>
         ) : (
           <Link key={i} href={localePath(locale, seg.href)} className="text-primary hover:underline">
             {seg.label}
