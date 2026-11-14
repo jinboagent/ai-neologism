@@ -44,8 +44,17 @@ next-env.d.ts
 # local database
 /data
 
-# internal working documents & review lists — local only
-/docs/
+# internal working documents — tracked EXCEPT the security write-ups
+# (public repo: incidents/ stay local on purpose). Process docs, reports and
+# specs are institutional memory and ship with the repo.
+/docs/**
+!/docs/
+!/docs/README.md
+!/docs/*.md
+!/docs/reports
+!/docs/reports/**
+!/docs/specs
+!/docs/specs/**
 /wordstoreview/
 
 # personal self-use tooling (PC-side scripts) — local only, never committed
