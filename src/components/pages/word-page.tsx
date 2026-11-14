@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { Badge, StatusPill } from "@/components/badge";
 import { IconExternal } from "@/components/icons";
@@ -51,6 +51,20 @@ export async function buildWordMetadata(slug: string, locale: Locale, cookieKey?
  */
 export async function WordPage({ slug, locale, cookieKey }: { slug: string; locale: Locale; cookieKey?: string | null }) {
   const t = getDictionary(locale);
+  // Cross-language slugs happen in the wild (a family link pasted with the wrong
+  // language prefix, a bookmark from another edition). A localized page must
+  // still never RENDER another language's entry under its URL — but a dead 404
+  // is worse than a hop: redirect to the same concept in this language, falling
+  // back to the EN canonical, and 404 only when no published sibling exists.
+  const anyLang = await getWord(slug, cookieKey ? hashKey(cookieKey) : null);
+  if (anyLang && anyLang.language !== locale) {
+    const family = anyLang.status === "published" ? await getWordFamily(anyLang.concept_id) : [];
+    const inLocale = family.find((f) => f.language === locale);
+    if (inLocale) redirect(localePath(locale, `/words/${inLocale.slug}`));
+    const en = family.find((f) => f.language === "en");
+    if (en) redirect(localePath("en", `/words/${en.slug}`));
+    notFound();
+  }
   const word = await getWord(slug, cookieKey ? hashKey(cookieKey) : null, locale);
   if (!word) notFound();
 

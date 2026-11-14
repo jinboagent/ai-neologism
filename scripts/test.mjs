@@ -671,8 +671,38 @@ async function testMultilingual() {
   const fr = await raw("/fr/about");
   ok("/fr/about serves French methodology", fr.status === 200 && fr.text.includes("Wikipédia vérifie"), `status ${fr.status}`);
 
-  const deWord = await raw("/de/words/graywashing");
-  ok("EN-only word 404s under the German edition", deWord.status === 404, `status ${deWord.status}`);
+  const deRedirect = await raw("/de/words/agendalessinvite", { manual: true });
+  ok(
+    "cross-language slug redirects to the German sibling",
+    deRedirect.status >= 300 && deRedirect.status < 400 && deRedirect.location === "/de/words/agendaloseinladung",
+    `status ${deRedirect.status}, location ${deRedirect.location}`
+  );
+  const deSibling = await raw("/de/words/agendaloseinladung");
+  ok("redirected-to German sibling renders", deSibling.status === 200 && deSibling.text.includes("Agendaloseinladung"), `status ${deSibling.status}`);
+
+  const esRedirect = await raw("/es/words/agendalessinvite", { manual: true });
+  ok(
+    "cross-language slug redirects to the Spanish sibling (user-reported case)",
+    esRedirect.status >= 300 && esRedirect.status < 400 && esRedirect.location === "/es/words/desordenvocatoria",
+    `status ${esRedirect.status}, location ${esRedirect.location}`
+  );
+
+  const enFallback = await raw("/de/words/carewash", { manual: true });
+  ok(
+    "EN-only concept under a locale redirects to the EN canonical",
+    enFallback.status >= 300 && enFallback.status < 400 && enFallback.location === "/words/carewash",
+    `status ${enFallback.status}, location ${enFallback.location}`
+  );
+
+  const unpublishedSibling = await raw("/de/words/graywashing");
+  ok(
+    "unpublished sibling does not leak — falls back to the EN canonical",
+    unpublishedSibling.status === 200 && unpublishedSibling.text.includes("graywashing"),
+    `status ${unpublishedSibling.status}`
+  );
+
+  const deMissing = await raw("/de/words/nope-xyz-slug");
+  ok("unknown slug under a locale still 404s", deMissing.status === 404, `status ${deMissing.status}`);
 
   const enWord = await raw("/words/graywashing");
   ok(
