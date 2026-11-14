@@ -22,6 +22,7 @@ live in the repo root: [../CONVENTIONS.md](../CONVENTIONS.md).
 
 | Date | Feature | File |
 |---|---|---|
+| 2026-11-14 | Multilingual phase 3 — per-language coin pipeline + pilot (30 in review) | [2026-11-14-multilingual-coin-pipeline.md](./2026-11-14-multilingual-coin-pipeline.md) |
 | 2026-11-14 | Multilingual phase 2 — i18n UI layer + style-D switcher | [2026-11-14-multilingual-i18n-ui.md](./2026-11-14-multilingual-i18n-ui.md) |
 | 2026-11-14 | Multilingual expansion (DE/EN/ES/FR) — phase 1: concept-family data foundation | [2026-11-14-multilingual-concept-family.md](./2026-11-14-multilingual-concept-family.md) |
 | 2026-11-08 | Coin-with-AI intent gate (hard quality gate on /api/coin/candidates) | [2026-11-08-coin-intent-gate.md](./2026-11-08-coin-intent-gate.md) |

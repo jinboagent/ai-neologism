@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Badge } from "@/components/badge";
 import { IconSparkle } from "@/components/icons";
 import { isSafeHttpUrl } from "@/lib/sanitize";
+import type { Locale } from "@/lib/i18n/core";
 import {
   EMPTY_FORM,
   Field,
@@ -20,7 +21,9 @@ import {
   type Verification,
 } from "@/components/word-form";
 
-export function CoinAi() {
+export function CoinAi({ locale = "en" }: { locale?: Locale }) {
+  // grammar facts of the picked candidate (gender/plural on the localized editions)
+  const [grammar, setGrammar] = useState<{ gender?: string; plural?: string } | undefined>(undefined);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [material, setMaterial] = useState("");
   const [url, setUrl] = useState("");
@@ -42,7 +45,7 @@ export function CoinAi() {
       const res = await fetch("/api/coin/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: material, url }),
+        body: JSON.stringify({ text: material, url, locale }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? data.error ?? "Coining failed");
@@ -57,6 +60,7 @@ export function CoinAi() {
 
   function pick(c: Candidate) {
     setAlternatives(candidates.filter((x) => x.word !== c.word));
+    setGrammar(c.gender || c.plural ? { gender: c.gender, plural: c.plural } : undefined);
     setForm({
       ...EMPTY_FORM,
       word: c.word,
@@ -79,7 +83,7 @@ export function CoinAi() {
       const res = await fetch("/api/coin/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word: form.word, definition: form.definition }),
+        body: JSON.stringify({ word: form.word, definition: form.definition, locale }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Verification failed");
@@ -116,6 +120,8 @@ export function CoinAi() {
           input_type: "ai",
           alternatives: alternativesList,
           verification: verification ?? undefined,
+          language: locale,
+          grammar,
         }),
       });
       const data = await res.json();

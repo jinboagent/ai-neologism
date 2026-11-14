@@ -68,7 +68,7 @@ export async function HomePage({ locale }: { locale: Locale }) {
         </div>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t.homeCoinDesc}</p>
         <div className="mt-4 rounded-xl border border-border bg-card p-5">
-          <CoinAi />
+          <CoinAi locale={locale} />
         </div>
       </section>
 

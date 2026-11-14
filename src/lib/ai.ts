@@ -3,6 +3,7 @@
 
 import dns from "node:dns/promises";
 import { CATEGORIES } from "./categories";
+import type { Locale } from "./i18n/core";
 
 export type Candidate = {
   word: string;
@@ -12,7 +13,25 @@ export type Candidate = {
   suggested_definition: string;
   related_concepts: string[];
   categories: string[];
+  /** Grammar facts for the non-English editions (concept-family model). */
+  gender?: string;
+  plural?: string;
 };
+
+/** Gender articles per language — re-validated in code, never trusted to the model. */
+const GENDER_WHITELIST: Partial<Record<Locale, RegExp>> = {
+  de: /^(der|die|das)$/i,
+  es: /^(el|la)$/i,
+  fr: /^(le|la)$/i,
+};
+
+/** True when `gender` is a legal article for the language (EN has none). */
+export function isValidGender(locale: Locale, gender: string): boolean {
+  const re = GENDER_WHITELIST[locale];
+  return !!re && re.test(gender.trim());
+}
+
+const LANG_NAME: Record<Locale, string> = { en: "English", de: "German", es: "Spanish", fr: "French" };
 
 const BASE_URL = process.env.AI_BASE_URL ?? "https://api.openai.com/v1";
 const API_KEY = process.env.AI_API_KEY ?? "";
@@ -22,6 +41,10 @@ export function aiConfigured(): boolean {
   return API_KEY.length > 0;
 }
 
+// One coining prompt per language: each hardcodes that language's morphology
+// (the "grammar cards" agreed with the owner), forbids copying English
+// patterns, and makes gender + plural REQUIRED — the code re-validates both
+// below. English keeps the original prompt verbatim.
 const SYSTEM_PROMPT = `You are the coining engine of AI Neologism, a curated dictionary of new English words for emerging social phenomena.
 
 Before proposing words, reason in the tradition of great concept-namers: Zygmunt Bauman (liquid modernity), Byung-Chul Han (burnout society), Shoshana Zuboff (surveillance capitalism), Alvin Toffler (future shock), Richard Louv (nature-deficit disorder).
@@ -36,7 +59,58 @@ Respond with ONLY a JSON array of 3-5 objects, each:
 {"word": "...", "pronunciation": "IPA transcription, e.g. /ˈɡreɪˌwɒʃɪŋ/ — REQUIRED, not optional", "etymology": "roots/morphemes and why", "rationale": "one line on why this coinage fits the phenomenon", "suggested_definition": "one-sentence dictionary-style definition", "related_concepts": ["one or two dictionary words or established terms this coinage sits near — omit the array if nothing meaningful comes to mind"], "categories": ["pick 1-2 from exactly this fixed list: ${CATEGORIES.join(" | ")}"]}
 No markdown fences, no commentary.`;
 
-export async function generateCandidates(material: string, focusHint?: string): Promise<Candidate[]> {
+const SYSTEM_PROMPT_DE = `You are the coining engine of AI Neologism, a curated dictionary of new GERMAN words for emerging social phenomena.
+
+Reason in the tradition of precise German compound-building: Schuldenschnitt, Fernweh, Erklärungsnot, Datenkrake — and of the concept-namers (Zygmunt Bauman, Byung-Chul Han).
+
+Craft rules for every candidate word (German word-formation):
+- Bilde das Wort NATIV deutsch, in dieser Reihenfolge: 1) feste Komposita mit Fugenelement (-s-, -n-, -es-, -er-) wie Arbeitsspeicher, 2) produktive Suffixe (-ung, -heit, -keit, -erei, -tum, -nis), 3) Bindestrich-Komposita nur bei fremdsprachigen Bestandteilen („Purpose-Washing").
+- ÜBERNIMM NIEMALS englische Muster direkt: kein "-washing" oder "-ism" als deutsches Suffix.
+- Das Genus folgt dem Grundwort (dem letzten Bestandteil): die Wäscherei → die Grauwäscherei; -ung/-heit/-keit/-erei/-schaft → die; -chen/-lein → das; -tum/-nis → das oder der.
+- Substantive großschreiben. Aussprechbar, möglichst ≤ 4 Silben. Nie ein Marken- oder Warenzeichenname. Muss ein reales, identifizierbares Phänomen benennen, das im Material beschrieben wird.
+
+Antworte NUR mit einem JSON-Array von 3-5 Objekten, jedes:
+{"word": "...", "gender": "der|die|das — Pflichtfeld", "plural": "die Pluralform — Pflichtfeld (folgt ebenfalls dem Grundwort)", "pronunciation": "IPA-Transkription, Hauptakzent auf dem ersten Bestandteil — Pflichtfeld", "etymology": "Morpheme und ihre Grenzen, und warum sie passen (auf Deutsch)", "rationale": "ein Satz, warum die Prägung zum Phänomen passt (auf Deutsch)", "suggested_definition": "eine wörterbuchartige Definition auf Deutsch", "related_concepts": ["ein bis zwei etablierte deutsche Begriffe, an die das Wort anschließt — weglassen, wenn nichts Sinnvolles einfällt"], "categories": ["pick 1-2 from exactly this fixed list: ${CATEGORIES.join(" | ")}"]}
+Keine Markdown-Fences, keine Kommentare.`;
+
+const SYSTEM_PROMPT_ES = `You are the coining engine of AI Neologism, a curated dictionary of new SPANISH words for emerging social phenomena.
+
+Reason in the tradition of precise Spanish neology: RAE-acceptable derivation (empoderamiento), popular suffixation (-ada), and the language's natural prepositional compounds (lavado de imagen).
+
+Craft rules for every candidate word (Spanish word-formation):
+- Forma la palabra NATIVAMENTE en español, en este orden de preferencia: 1) derivación sufijal (-ción, -ismo, -dad, -ada, -era, -aje, -ancia), 2) derivación prefijal (des-, auto-, neo-, macro-), 3) compuestos sintagmáticos con preposición (X de Y), 4) compuestos solidificados solo si suenan naturales.
+- NO copies patrones ingleses: nada de "-washing" o "-ism" como sufijos españoles.
+- El género lo decide el sufijo o la cabeza del compuesto: -ción/-dad/-era/-ancia → la; -ismo/-aje/-or → el.
+- Respeta la acentuación castellana: agudas terminadas en -n o -s, sin tilde; llanas que terminan en algo distinto de -n, -s o vocal, con tilde; esdrújulas siempre.
+- Pronunciable, preferiblemente ≤ 4 sílabas. Nunca un nombre comercial. Debe nombrar un fenómeno real e identificable descrito en el material.
+
+Responde SOLO con un array JSON de 3-5 objetos, cada uno:
+{"word": "...", "gender": "el|la — obligatorio", "plural": "la forma de plural — obligatoria", "pronunciation": "transcripción IPA — obligatoria", "etymology": "morfemas y por qué encajan (en español)", "rationale": "una frase sobre por qué la acuñación encaja (en español)", "suggested_definition": "una definición estilo diccionario, en español", "related_concepts": ["uno o dos términos españoles establecidos cercanos — omite el array si nada encaja"], "categories": ["pick 1-2 from exactly this fixed list: ${CATEGORIES.join(" | ")}"]}
+Sin markdown, sin comentarios.`;
+
+const SYSTEM_PROMPT_FR = `You are the coining engine of AI Neologism, a curated dictionary of new FRENCH words for emerging social phenomena.
+
+Follow the French tradition of nativizing neology (baladeur instead of walkman; the FranceTerme discipline): derivation first, clean compounding second.
+
+Craft rules for every candidate word (French word-formation):
+- Forme le mot NATIVEMENT en français, par ordre de préférence : 1) dérivation (-age, -isme, -tion, -erie, -itude, -ade, -ment), 2) composés à trait d'union (garde-malade), 3) adaptation d'un emprunt aux moules français.
+- NE copie PAS les motifs anglais : pas de "-washing" ou "-ism" comme suffixes français.
+- Le genre est fixé par le suffixe ou la tête du composé : -age/-isme/-ment → le ; -tion/-sion/-ité/-erie/-ade → la.
+- Anticipe l'élision : si le mot commence par une voyelle, l'article devient l'.
+- Prononçable, si possible ≤ 4 syllabes. Jamais un nom de marque. Doit nommer un phénomène réel et identifiable décrit dans le matériau.
+
+Réponds UNIQUEMENT par un tableau JSON de 3 à 5 objets, chacun :
+{"word": "...", "gender": "le|la — obligatoire", "plural": "la forme plurielle — obligatoire", "pronunciation": "transcription IPA — obligatoire", "etymology": "les morphèmes et pourquoi ils conviennent (en français)", "rationale": "une phrase sur pourquoi la forge convient (en français)", "suggested_definition": "une définition de style dictionnaire, en français", "related_concepts": ["un ou deux termes français établis proches — omet le tableau si rien de pertinent"], "categories": ["pick 1-2 from exactly this fixed list: ${CATEGORIES.join(" | ")}"]}
+Pas de balises markdown, pas de commentaires.`;
+
+const PROMPTS: Record<Locale, string> = {
+  en: SYSTEM_PROMPT,
+  de: SYSTEM_PROMPT_DE,
+  es: SYSTEM_PROMPT_ES,
+  fr: SYSTEM_PROMPT_FR,
+};
+
+export async function generateCandidates(material: string, focusHint?: string, locale: Locale = "en"): Promise<Candidate[]> {
   if (!aiConfigured()) {
     throw new Error("AI_NOT_CONFIGURED");
   }
@@ -50,7 +124,7 @@ export async function generateCandidates(material: string, focusHint?: string): 
         model: MODEL,
         temperature: 0.8,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: PROMPTS[locale] },
           {
             role: "user",
             content:
@@ -66,7 +140,7 @@ export async function generateCandidates(material: string, focusHint?: string): 
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const text = data.choices?.[0]?.message?.content ?? "";
-    return parseCandidates(text);
+    return parseCandidates(text, locale);
   } finally {
     clearTimeout(timeout);
   }
@@ -101,7 +175,7 @@ Respond with ONLY this JSON, no markdown fences, no commentary:
  * with enough substance to coin from. A "no" returns concrete feedback instead
  * of burning the (much more expensive) generation call on junk.
  */
-export async function assessCoiningIntent(material: string): Promise<IntentAssessment> {
+export async function assessCoiningIntent(material: string, locale: Locale = "en"): Promise<IntentAssessment> {
   if (!aiConfigured()) {
     throw new Error("AI_NOT_CONFIGURED");
   }
@@ -116,7 +190,9 @@ export async function assessCoiningIntent(material: string): Promise<IntentAsses
         temperature: 0.2,
         max_tokens: 300,
         messages: [
-          { role: "system", content: GATE_PROMPT },
+          // The gate logic is language-agnostic; only the visitor-facing reason
+          // is written in the site language.
+          { role: "system", content: `${GATE_PROMPT}\nWrite "reason" in ${LANG_NAME[locale]}.` },
           { role: "user", content: `Material to judge:\n\n${material.slice(0, 6000)}` },
         ],
       }),
@@ -150,7 +226,7 @@ export async function assessCoiningIntent(material: string): Promise<IntentAsses
   }
 }
 
-function parseCandidates(text: string): Candidate[] {
+function parseCandidates(text: string, locale: Locale = "en"): Candidate[] {
   let raw = text.trim();
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) raw = fence[1].trim();
@@ -166,6 +242,7 @@ function parseCandidates(text: string): Candidate[] {
     throw new Error("AI_BAD_FORMAT");
   }
   if (!Array.isArray(parsed)) throw new Error("AI_BAD_FORMAT");
+  const genderRe = locale === "en" ? null : GENDER_WHITELIST[locale];
   return parsed
     .filter((c) => c && typeof c.word === "string" && c.word.trim().length > 0)
     .slice(0, 5)
@@ -181,7 +258,13 @@ function parseCandidates(text: string): Candidate[] {
       categories: Array.isArray(c.categories)
         ? c.categories.map((x: unknown) => String(x).trim()).filter((x: string) => (CATEGORIES as readonly string[]).includes(x)).slice(0, 2)
         : [],
-    }));
+      // Grammar facts: required for the non-English editions, stripped for EN.
+      gender: typeof c.gender === "string" && genderRe && genderRe.test(c.gender.trim()) ? c.gender.trim().toLowerCase() : undefined,
+      plural: locale !== "en" && typeof c.plural === "string" && c.plural.trim() ? c.plural.trim() : undefined,
+    }))
+    // A non-English candidate without a whitelisted gender or a plural is
+    // unusable on the entry page — drop it rather than publish a broken form.
+    .filter((c) => !genderRe || (c.gender !== undefined && c.plural !== undefined));
 }
 
 const PRIVATE_V4_RE = /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/;

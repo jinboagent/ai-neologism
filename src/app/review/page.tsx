@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, StatusPill } from "@/components/badge";
 import { isSafeHttpUrl } from "@/lib/sanitize";
+import { LOCALES, LOCALE_NAMES } from "@/lib/i18n/core";
 
 type QueueWord = {
   slug: string;
@@ -20,6 +21,7 @@ type QueueWord = {
   badge: string;
   created_at: string;
   is_own: boolean;
+  language?: string;
 };
 
 type KeyStatus = { has_key: boolean; accepted_words?: number; review_threshold: number; can_review?: boolean };
@@ -34,6 +36,9 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Language filter: the multilingual pipeline queues per-language entries;
+  // reviewers slice the queue by language (phase 3).
+  const [langFilter, setLangFilter] = useState<"all" | (typeof LOCALES)[number]>("all");
 
   const load = useCallback(async () => {
     // The first statement has to be the await. Clearing the error synchronously here
@@ -148,13 +153,35 @@ export default function ReviewPage() {
         <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_3fr]">
           <section aria-label="Review queue">
             <h2 className="text-lg font-bold">Queue ({queue.length})</h2>
+            <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Filter by language">
+              {(["all", ...LOCALES] as const).map((l) => {
+                const count = l === "all" ? queue.length : queue.filter((w) => (w.language ?? "en") === l).length;
+                if (l !== "all" && count === 0) return null;
+                return (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => setLangFilter(l)}
+                    className={`min-h-8 rounded-full border px-3 text-xs font-medium transition-colors cursor-pointer ${
+                      langFilter === l
+                        ? "border-primary bg-primary text-white"
+                        : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {l === "all" ? "All" : LOCALE_NAMES[l]} ({count})
+                  </button>
+                );
+              })}
+            </div>
             {queue.length === 0 ? (
               <p className="mt-3 rounded-xl border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
                 The queue is empty. Well done, everyone.
               </p>
             ) : (
               <ul className="mt-3 space-y-3">
-                {queue.map((w) => (
+                {queue
+                  .filter((w) => langFilter === "all" || (w.language ?? "en") === langFilter)
+                  .map((w) => (
                   <li key={w.slug}>
                     <button
                       type="button"
@@ -170,6 +197,11 @@ export default function ReviewPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="word-title font-bold text-primary">{w.word}</span>
                         <Badge kind={w.badge} />
+                        {w.language && w.language !== "en" && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-bold uppercase text-muted-foreground">
+                            {w.language}
+                          </span>
+                        )}
                         {w.is_own && <span className="text-xs text-bad">your own — cannot review</span>}
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{w.definition}</p>
@@ -224,7 +256,8 @@ export default function ReviewPage() {
                   </ul>
                 )}
                 <p className="mt-3 text-xs text-muted-foreground">
-                  <StatusPill status="in_review" /> · submitted {selected.created_at.slice(0, 10)} ·{" "}
+                  <StatusPill status="in_review" /> · {selected.language && selected.language !== "en" ? `${LOCALE_NAMES[selected.language as keyof typeof LOCALE_NAMES]} edition · ` : ""}
+                  submitted {selected.created_at.slice(0, 10)} ·{" "}
                   {selected.ai_assisted ? "AI-assisted" : "human-coined"}
                 </p>
 

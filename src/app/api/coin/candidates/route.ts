@@ -1,20 +1,32 @@
 import { NextResponse } from "next/server";
 import { aiConfigured, assessCoiningIntent, fetchUrlContent, generateCandidates } from "@/lib/ai";
 import { rateLimit, voterFingerprint } from "@/lib/ratelimit";
+import { safeEqual } from "@/lib/secure";
+import { isLocale, type Locale } from "@/lib/i18n/core";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  // Operator bypass (same pattern as /api/coin/verify): batch runs authenticate
+  // with the CRON_SECRET so a multi-language pilot run isn't strangled by the
+  // per-identity cap. The global daily cap below still applies to everyone.
+  const bypass = !!process.env.CRON_SECRET && safeEqual(req.headers.get("x-cron-secret") ?? "", process.env.CRON_SECRET);
   const fingerprint = voterFingerprint(req);
-  if (!(await rateLimit(`coin:${fingerprint}`, 10, 60 * 60 * 1000))) {
+  if (!bypass && !(await rateLimit(`coin:${fingerprint}`, 10, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many coining requests this hour." }, { status: 429 });
   }
 
-  let body: { text?: string; url?: string };
+  let body: { text?: string; url?: string; locale?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "BAD_JSON" }, { status: 400 });
+  }
+  // Which language to coin in (default English). Invalid values are rejected,
+  // never silently remapped — the caller's UI locale decides the output language.
+  const locale = body.locale ?? "en";
+  if (!isLocale(locale)) {
+    return NextResponse.json({ error: "BAD_LANGUAGE", message: `Unknown language: ${body.locale}` }, { status: 400 });
   }
 
   let material = (body.text ?? "").trim();
@@ -62,7 +74,7 @@ export async function POST(req: Request) {
   // human review still gate downstream output); only a clean "no" blocks.
   let assessment: Awaited<ReturnType<typeof assessCoiningIntent>> | null = null;
   try {
-    assessment = await assessCoiningIntent(material);
+    assessment = await assessCoiningIntent(material, locale as Locale);
   } catch {
     assessment = null; // gate unavailable — do not block the visitor on it
   }
@@ -74,7 +86,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const candidates = await generateCandidates(material, assessment?.phenomenon ?? undefined);
+    const candidates = await generateCandidates(material, assessment?.phenomenon ?? undefined, locale as Locale);
     return NextResponse.json({ candidates, material_preview: material.slice(0, 200) });
   } catch (e) {
     const code = e instanceof Error ? e.message : "AI_FAILED";

@@ -12,6 +12,9 @@ export type Candidate = {
   suggested_definition: string;
   related_concepts: string[];
   categories: string[];
+  /** Grammar facts on non-English editions (set by the localized prompts). */
+  gender?: string;
+  plural?: string;
 };
 export type RefRow = { type: string; title: string; url: string; author: string; outlet: string; date: string; excerpt: string };
 export type Verification = {

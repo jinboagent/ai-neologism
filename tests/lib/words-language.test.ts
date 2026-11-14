@@ -1,9 +1,27 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { alphabetWithCounts, countPublished, getWord, listByLetter, popularity, searchWords } from "@/lib/words";
+import { alphabetWithCounts, countPublished, getWord, listByLetter, popularity, searchWords, slugify } from "@/lib/words";
 import { insertWord, rawRun, resetDb } from "../helpers/db";
 
 beforeEach(async () => {
   await resetDb();
+});
+
+describe("locale-aware slugify", () => {
+  it("transliterates German umlauts the Duden way (ä→ae)", () => {
+    expect(slugify("Grauwäscherei", "de")).toBe("grauwaescherei");
+    expect(slugify("Straße", "de")).toBe("strasse");
+    expect(slugify("Übermut", "de")).toBe("uebermut");
+  });
+
+  it("strips diacritics for Spanish and French", () => {
+    expect(slugify("Añoranza", "es")).toBe("anoranza");
+    expect(slugify("Dépense", "fr")).toBe("depense");
+  });
+
+  it("leaves English unchanged", () => {
+    expect(slugify("Graywashing")).toBe("graywashing");
+    expect(slugify("micro legacy", "en")).toBe("micro-legacy");
+  });
 });
 
 // Seed a small bilingual dictionary: two published EN words, one published DE

@@ -692,6 +692,33 @@ async function testMultilingual() {
     sitemap.status === 200 && sitemap.text.includes("<loc>https://www.ai-neologism.com/de</loc>") && sitemap.text.includes('hreflang="de"'),
     `status ${sitemap.status}`
   );
+
+  // phase 3: localized submission pipeline
+  const deSub = await req("POST", "/api/words", {
+    body: {
+      word: "zztestGrauwäscherei",
+      definition: "Die Praxis, oberflächliche Wohltätigkeit zu betreiben, um Schaden zu verschleiern.",
+      language: "de",
+      grammar: { gender: "die", plural: "zztestGrauwäschereien" },
+      ai_assisted: true,
+      input_type: "ai",
+    },
+  });
+  ok(
+    "German submission accepted with Duden-transliterated slug",
+    deSub.status === 202 && deSub.json?.slug === "zztestgrauwaescherei",
+    `status ${deSub.status}, slug ${deSub.json?.slug}`
+  );
+  const badLang = await req("GET", "/api/words?language=xx");
+  ok("unknown language rejected on GET /api/words", badLang.status === 400, `status ${badLang.status}`);
+  const badGrammar = await req("POST", "/api/words", {
+    body: { word: "zztestEtwaswort", definition: "Eine Definition, die lang genug für die Prüfung ist.", language: "de" },
+  });
+  ok(
+    "non-English submission without grammar rejected",
+    badGrammar.status === 400 && badGrammar.json?.error === "INVALID_GRAMMAR",
+    `status ${badGrammar.status}`
+  );
 }
 
 // cleanup of this run's data

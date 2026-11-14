@@ -9,6 +9,7 @@ type AdminWord = {
   slug: string;
   word: string;
   definition: string;
+  language?: string;
   part_of_speech: string;
   pronunciation: string | null;
   explanation: string;
@@ -30,6 +31,7 @@ type ManagedWord = {
   slug: string;
   word: string;
   status: string;
+  language?: string;
   badge: string;
   input_type: string | null;
   use_votes: number;
@@ -567,6 +569,9 @@ export default function AdminPage() {
                       {statusLabel[w.status] ?? w.status}
                     </span>
                     <Badge kind={w.badge} />
+                    {w.language && w.language !== "en" && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-bold uppercase text-muted-foreground">{w.language}</span>
+                    )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground/80">
                     {w.use_votes} would use · {w.work_votes} needs work · {w.input_type ?? "unknown source"} · created{" "}
@@ -704,6 +709,9 @@ export default function AdminPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="word-title font-bold text-primary">{w.word}</span>
                         <Badge kind={w.badge} />
+                        {w.language && w.language !== "en" && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-bold uppercase text-muted-foreground">{w.language}</span>
+                        )}
                         <StatusPill status="in_review" />
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{w.definition}</p>

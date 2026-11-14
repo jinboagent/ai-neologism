@@ -1,6 +1,7 @@
 import { qAll, qGet, withTx } from "./db";
 import type { Client } from "@libsql/client";
 import { canReview } from "./keys";
+import type { Locale } from "./i18n/core";
 
 export type Reference = {
   type: "news" | "academic" | "essay" | "social" | "internal";
@@ -122,8 +123,23 @@ export function toPublic(w: Word): PublicWord {
 // Field bounds live in ./limits — a client-safe module (see the note there).
 export { LIMITS } from "./limits";
 
-export function slugify(word: string): string {
-  return word
+export function slugify(word: string, locale: Locale = "en"): string {
+  let s = word;
+  // Per-language transliteration to ASCII slugs. German follows the Duden
+  // convention (ä→ae, not ä→a); the other Latin languages drop diacritics.
+  if (locale === "de") {
+    s = s
+      .replace(/ä/g, "ae")
+      .replace(/Ä/g, "Ae")
+      .replace(/ö/g, "oe")
+      .replace(/Ö/g, "Oe")
+      .replace(/ü/g, "ue")
+      .replace(/Ü/g, "Ue")
+      .replace(/ß/g, "ss");
+  } else if (locale === "es" || locale === "fr") {
+    s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+  return s
     .toLowerCase()
     .trim()
     // Keep "_" here so the next step can turn it into a hyphen; stripping it

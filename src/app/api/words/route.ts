@@ -12,6 +12,8 @@ import {
   sanitizeSlugList,
 } from "@/lib/sanitize";
 import { countPublished, hydrate, LIMITS, listPublished, slugify, toPublic, type Reference } from "@/lib/words";
+import { isLocale } from "@/lib/i18n/core";
+import { isValidGender } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +38,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ words: rows.map(hydrate).map(toPublic) });
   }
 
-  const words = await listPublished({ limit, offset: (page - 1) * limit });
+  const langRaw = url.searchParams.get("language") ?? "";
+  if (langRaw && !isLocale(langRaw)) {
+    return NextResponse.json({ error: "BAD_LANGUAGE", message: `Unknown language: ${langRaw}` }, { status: 400 });
+  }
+  const words = await listPublished({ limit, offset: (page - 1) * limit, language: langRaw || undefined });
   // `count` is the total number of published words (finding #9: it used to report
   // the current page's size); `page_size` is the number of items on this page.
-  const total = await countPublished();
+  const total = await countPublished(langRaw || undefined);
   return NextResponse.json({ words: words.map(toPublic), page, count: total, page_size: words.length });
 }
 
@@ -57,6 +63,10 @@ type Submission = {
   ai_assisted?: boolean;
   input_type?: string;
   contact_email?: string;
+  /** Concept-family fields (multilingual phase 3). */
+  language?: string;
+  concept_id?: number;
+  grammar?: { gender?: string; plural?: string };
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -90,6 +100,38 @@ export async function POST(req: Request) {
       { error: "INVALID_EMAIL", message: "contact_email must be a valid email address (or omitted)." },
       { status: 400 }
     );
+  }
+
+  // Concept-family fields (multilingual phase 3). Invalid values are rejected,
+  // never silently remapped. concept_id is safe to accept from any submitter:
+  // a wrong link only materializes after human review approves the entry.
+  const language = (body.language ?? "en").trim().toLowerCase();
+  if (!isLocale(language)) {
+    return NextResponse.json({ error: "BAD_LANGUAGE", message: `Unknown language: ${body.language}` }, { status: 400 });
+  }
+  let conceptId: number | null = null;
+  if (body.concept_id !== undefined) {
+    const id = Number(body.concept_id);
+    if (!Number.isInteger(id) || id < 1) {
+      return NextResponse.json({ error: "INVALID_CONCEPT", message: "concept_id must be a positive integer." }, { status: 400 });
+    }
+    const concept = await qGet("SELECT id FROM concepts WHERE id = ?", [id]);
+    if (!concept) {
+      return NextResponse.json({ error: "INVALID_CONCEPT", message: `No concept with id ${id}.` }, { status: 400 });
+    }
+    conceptId = id;
+  }
+  let grammarJson = "{}";
+  if (language !== "en") {
+    const gender = (body.grammar?.gender ?? "").trim();
+    const plural = (body.grammar?.plural ?? "").trim();
+    if (!isValidGender(language, gender) || !plural) {
+      return NextResponse.json(
+        { error: "INVALID_GRAMMAR", message: `A ${language} entry requires grammar.gender (${language === "de" ? "der|die|das" : "el|la|le|la"}) and grammar.plural.` },
+        { status: 400 }
+      );
+    }
+    grammarJson = JSON.stringify({ gender: gender.toLowerCase(), plural });
   }
 
   // Field bounds enforced on every write path (finding #3): PUT and the admin
@@ -172,7 +214,7 @@ export async function POST(req: Request) {
       // Slug uniqueness is checked on the transaction itself — the embedded
       // client has a single connection, and a nested main-client call while the
       // transaction is open would deadlock (TRANSACTION_ACTIVE).
-      const base = slugify(word) || "word";
+      const base = slugify(word, language) || "word";
       let newSlug = base;
       let n = 2;
       while (true) {
@@ -183,8 +225,9 @@ export async function POST(req: Request) {
       const info = await tx.execute(
         `INSERT INTO words (slug, word, pronunciation, part_of_speech, definition, explanation, why_this_word,
           alternatives_json, verification_json, references_json, related_words, categories_json,
-          ai_assisted, status, badge, input_type, contributor_key_hash, contact_email)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_review', ?, ?, ?, ?)`,
+          ai_assisted, status, badge, input_type, contributor_key_hash, contact_email,
+          language, concept_id, grammar_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_review', ?, ?, ?, ?, ?, ?, ?)`,
         [
           newSlug,
           word,
@@ -203,6 +246,9 @@ export async function POST(req: Request) {
           inputType,
           keyHash as string,
           contactEmail || null,
+          language,
+          conceptId,
+          grammarJson,
         ]
       );
       const wordId = Number(info.lastInsertRowid);
@@ -214,7 +260,21 @@ export async function POST(req: Request) {
       return { slug: newSlug };
     });
 
-  const outcome = await insertSubmission();
+  let outcome: InsertOutcome;
+  try {
+    outcome = await insertSubmission();
+  } catch (e) {
+    // The partial unique index enforces one live entry per concept per language
+    // — a second submission for an occupied slot is a 409, not a 500. libsql
+    // reports the violation by column names, not by the index name.
+    if (e instanceof Error && (e.message.includes("idx_words_concept_language_active") || e.message.includes("UNIQUE constraint failed: words.concept_id, words.language"))) {
+      return NextResponse.json(
+        { error: "CONCEPT_LANGUAGE_TAKEN", message: "This concept already has a live or pending entry in that language." },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
   if ("conflict" in outcome) {
     return NextResponse.json(
       {

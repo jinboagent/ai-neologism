@@ -2,32 +2,65 @@
 // Verdicts: NEW | NEAR_EXISTING (word exists, this sense doesn't) | EXISTS | UNVERIFIED.
 
 import { searchWeb, type SearchOutcome } from "./search";
+import type { Locale } from "./i18n/core";
 import type { Verification, VerificationQuery } from "./words";
 
+// Function words for every edition — they would otherwise dominate the
+// same-sense keyword overlap for non-English definitions.
 const STOPWORDS = new Set(
-  "the a an of to in on for with and or is are be being been that this these those it its as by at from not no but if when who whom which what their there more most other such only own same so than too very can will just should now new one two also into over under about after before between during through against without within along across behind beyond plus per via etc".split(
-    " "
-  )
+  ("the a an of to in on for with and or is are be being been that this these those it its as by at from not no but if when who whom which what their there more most other such only own same so than too very can will just should now new one two also into over under about after before between during through against without within along across behind beyond plus per via etc " +
+    // German
+    "der die das und oder aber ist sind war waren ein eine einen einem eines dem den des dass nicht auch als wie bei mit von zum zur im am an auf für um über unter nach vor durch ohne aus so noch nur schon sehr hier dort man sich ihre ihr seine sein mehr meisten andere solche kann wird werden muss jetzt neu neue zwei drei innerhalb " +
+    // Spanish
+    "el la los las un una unos unas y o pero es son ser estar está están fue que quien cual cuales su sus mi mis tu tus más menos otro otra otros otras tal tan tanto muy puede pueden será ahora nuevo nueva dos tres también sobre bajo entre durante través contra sin dentro junto según " +
+    // French
+    "le la les un une des de du au aux et ou mais est était étaient qui quoi dont où son ses ma mes ta tes votre vos plus moins autre autres tel tant très peut peuvent sera maintenant nouveau nouvelle deux trois aussi sous dans")
+    .split(" ")
 );
 
 function keywords(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
-      .replace(/[^a-z\s-]/g, " ")
+      // Keep accented Latin letters — German umlauts, Spanish ñ, French é —
+      // so non-English definitions extract real keywords.
+      .replace(/[^a-z\u00c0-\u024f\s-]/gi, " ")
       .split(/\s+/)
       .filter((w) => w.length > 3 && !STOPWORDS.has(w))
   );
 }
 
-function containsWord(haystack: string, word: string): boolean {
-  const w = word.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (!w) return false;
-  const re = new RegExp(`(^|[^a-z0-9])${w}([^a-z0-9]|$)`, "i");
-  return re.test(haystack.toLowerCase());
+/** Fold a string for word-form comparison: lowercase, ß→ss, strip diacritics. */
+function fold(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
-async function dictionaryCheck(word: string): Promise<{ exists: boolean; senses: string[]; ok: boolean }> {
+function containsWord(haystack: string, word: string): boolean {
+  const h = fold(haystack).replace(/[^a-z0-9]/g, " ");
+  const w = fold(word).replace(/[^a-z0-9]/g, "");
+  if (!w) return false;
+  const re = new RegExp(`(^|[^a-z0-9])${w}([^a-z0-9]|$)`, "i");
+  return re.test(h);
+}
+
+// Per-language novelty search plans: the headword is searched with this
+// language's "meaning/definition" phrasings plus a dictionary-site probe —
+// a German coinage must be searched on the German web.
+const SEARCH_PLANS: Record<Locale, (w: string) => string[]> = {
+  en: (w) => [`"${w}"`, `"${w}" meaning`, `"${w}" definition`],
+  de: (w) => [`"${w}"`, `"${w}" Bedeutung`, `"${w}" Definition`, `"${w}" Duden`],
+  es: (w) => [`"${w}"`, `"${w}" significado`, `"${w}" definición`, `"${w}" diccionario`],
+  fr: (w) => [`"${w}"`, `"${w}" définition`, `"${w}" sens`, `"${w}" dictionnaire`],
+};
+
+async function dictionaryCheck(word: string, locale: Locale): Promise<{ exists: boolean; senses: string[]; ok: boolean }> {
+  // The free dictionary API is English-only; the other editions rely on the
+  // localized web-search plan above (which includes a dictionary-site probe).
+  if (locale !== "en") return { exists: false, senses: [], ok: true };
   try {
     const res = await fetch(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`,
@@ -45,7 +78,7 @@ async function dictionaryCheck(word: string): Promise<{ exists: boolean; senses:
   }
 }
 
-export async function verifyNovelty(word: string, definition: string): Promise<Verification> {
+export async function verifyNovelty(word: string, definition: string, locale: Locale = "en"): Promise<Verification> {
   const defKeys = keywords(definition);
   const queries: VerificationQuery[] = [];
   const closest: { url?: string; note: string }[] = [];
@@ -54,11 +87,7 @@ export async function verifyNovelty(word: string, definition: string): Promise<V
   let totalChecked = 0;
   let searchSuccesses = 0;
 
-  const searchPlan = [
-    `"${word}"`,
-    `"${word}" meaning`,
-    `"${word}" definition`,
-  ];
+  const searchPlan = SEARCH_PLANS[locale](word);
 
   for (const q of searchPlan) {
     let outcome: SearchOutcome = { results: [], ok: false };
@@ -96,7 +125,7 @@ export async function verifyNovelty(word: string, definition: string): Promise<V
     queries.push({ query: q, results_checked: results.length, meaningful_matches: matchesThisQuery });
   }
 
-  const dict = await dictionaryCheck(word);
+  const dict = await dictionaryCheck(word, locale);
   let dictSameSense = false;
   if (dict.exists) {
     for (const sense of dict.senses) {
@@ -111,7 +140,10 @@ export async function verifyNovelty(word: string, definition: string): Promise<V
   }
 
   const checked_at = new Date().toISOString().slice(0, 10);
-  const method = "quoted exact-match web search + dictionary lookup (dictionaryapi.dev)";
+  const method =
+    locale === "en"
+      ? "quoted exact-match web search + dictionary lookup (dictionaryapi.dev)"
+      : `quoted exact-match web search in ${locale} (localized phrasings + dictionary-site probe; the free dictionary API is EN-only)`;
 
   let verdict: Verification["verdict"];
   let note: string;
