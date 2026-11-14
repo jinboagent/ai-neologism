@@ -36,6 +36,15 @@ export function getDb(): Client {
 // Each statement stands alone: CREATE ... IF NOT EXISTS keeps runs idempotent.
 // Triggers keep their internal semicolons — they are single array entries, never split.
 const SCHEMA_STATEMENTS: string[] = [
+  `CREATE TABLE IF NOT EXISTS themes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT UNIQUE NOT NULL,
+      label_en TEXT NOT NULL,
+      label_de TEXT,
+      label_es TEXT,
+      label_fr TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
   `CREATE TABLE IF NOT EXISTS words (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT UNIQUE NOT NULL,
@@ -62,6 +71,7 @@ const SCHEMA_STATEMENTS: string[] = [
       published_at TEXT,
       language TEXT NOT NULL DEFAULT 'en',
       concept_id INTEGER,
+      theme_id INTEGER REFERENCES themes(id),
       grammar_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -166,6 +176,22 @@ export async function ensureSchema(): Promise<void> {
       if (!names.includes("grammar_json")) {
         await db.execute("ALTER TABLE words ADD COLUMN grammar_json TEXT NOT NULL DEFAULT '{}'");
       }
+      // funny/novelty ratings were introduced by ad-hoc ALTERs and never added to
+      // SCHEMA_STATEMENTS, so a fresh clone / Turso DB lacked them and batch import
+      // crashed. Reconciled here so every environment converges.
+      if (!names.includes("funny_level")) {
+        await db.execute("ALTER TABLE words ADD COLUMN funny_level INTEGER");
+      }
+      if (!names.includes("novelty_level")) {
+        await db.execute("ALTER TABLE words ADD COLUMN novelty_level INTEGER");
+      }
+      // Theme tag (2026-11-14): nullable FK to the themes table. Data seeding +
+      // backfill is done by scripts/migrate-themes.mjs, not here, so ensureSchema
+      // only guarantees the column and index exist.
+      if (!names.includes("theme_id")) {
+        await db.execute("ALTER TABLE words ADD COLUMN theme_id INTEGER REFERENCES themes(id)");
+      }
+      await db.execute("CREATE INDEX IF NOT EXISTS idx_words_theme ON words(theme_id)");
       // Concept-family backfill: every pre-existing word becomes the anchor of its
       // own concept (label = headword); per-language siblings join the same concept
       // later. Only unlinked rows are processed, so this is a no-op after the first
