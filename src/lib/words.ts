@@ -145,24 +145,29 @@ export async function uniqueSlug(base: string): Promise<string> {
   return candidate;
 }
 
-export async function listPublished(opts: { limit?: number; offset?: number } = {}): Promise<Word[]> {
+export async function listPublished(opts: { limit?: number; offset?: number; language?: string } = {}): Promise<Word[]> {
+  const filter = opts.language ? "AND language = ?" : "";
+  const args = opts.language ? [opts.language] : [];
   const rows = await qAll<WordRow>(
-    `SELECT * FROM words WHERE status = 'published'
+    `SELECT * FROM words WHERE status = 'published' ${filter}
      ORDER BY published_at DESC LIMIT ? OFFSET ?`,
-    [opts.limit ?? 50, opts.offset ?? 0]
+    [...args, opts.limit ?? 50, opts.offset ?? 0]
   );
   return rows.map(hydrate);
 }
 
-export async function countPublished(): Promise<number> {
-  const row = await qGet<{ n: number }>("SELECT COUNT(*) AS n FROM words WHERE status = 'published'");
+export async function countPublished(language?: string): Promise<number> {
+  const filter = language ? "AND language = ?" : "";
+  const row = await qGet<{ n: number }>(`SELECT COUNT(*) AS n FROM words WHERE status = 'published' ${filter}`, language ? [language] : []);
   return row?.n ?? 0;
 }
 
 /** Visibility: published words are public; drafts/queue items only to their owner or a reviewer. */
-export async function getWord(slug: string, viewerKeyHash?: string | null): Promise<Word | null> {
+export async function getWord(slug: string, viewerKeyHash?: string | null, language?: string): Promise<Word | null> {
   const row = await qGet<WordRow>("SELECT * FROM words WHERE slug = ?", [slug]);
   if (!row) return null;
+  // A localized page must never render another language's entry under its URL.
+  if (language && row.language !== language) return null;
   const w = hydrate(row);
   const isOwner = viewerKeyHash && w.contributor_key_hash === viewerKeyHash;
   const isReviewer = viewerKeyHash ? await canReview(viewerKeyHash) : false;
@@ -170,24 +175,28 @@ export async function getWord(slug: string, viewerKeyHash?: string | null): Prom
   return w;
 }
 
-export async function listByLetter(letter: string): Promise<Word[]> {
+export async function listByLetter(letter: string, language?: string): Promise<Word[]> {
   // Escape LIKE metacharacters so a "%" or "_" in `letter` matches literally
   // instead of acting as a wildcard.
   const escaped = letter.replace(/[\\%_]/g, (m) => `\\${m}`);
+  const filter = language ? "AND language = ?" : "";
   const rows = await qAll<WordRow>(
-    `SELECT * FROM words WHERE status = 'published' AND word LIKE ? ESCAPE '\\'
+    `SELECT * FROM words WHERE status = 'published' AND word LIKE ? ESCAPE '\\' ${filter}
      ORDER BY word COLLATE NOCASE`,
-    [`${escaped}%`]
+    language ? [`${escaped}%`, language] : [`${escaped}%`]
   );
   return rows.map(hydrate);
 }
 
-export async function alphabetWithCounts(): Promise<{ letter: string; count: number }[]> {
+export async function alphabetWithCounts(language?: string): Promise<{ letter: string; count: number }[]> {
+  const filter = language ? "AND language = ?" : "";
   const rows = await qAll<{ letter: string; n: number }>(
     `SELECT UPPER(SUBSTR(word, 1, 1)) AS letter, COUNT(*) AS n FROM words
-     WHERE status = 'published' GROUP BY letter ORDER BY letter`
+     WHERE status = 'published' ${filter} GROUP BY letter ORDER BY letter`,
+    language ? [language] : []
   );
-  return rows.filter((r) => /^[A-Z]$/.test(r.letter)).map((r) => ({ letter: r.letter, count: r.n }));
+  // German coinages may start with an umlaut — count those letters too.
+  return rows.filter((r) => /^[A-ZÄÖÜ]$/.test(r.letter)).map((r) => ({ letter: r.letter, count: r.n }));
 }
 
 export type FamilyMember = { language: string; word: string; slug: string; pronunciation: string | null };
@@ -208,36 +217,40 @@ export async function getWordFamily(conceptId: number | null): Promise<FamilyMem
   );
 }
 
-export async function searchWords(q: string, limit = 30): Promise<Word[]> {
+export async function searchWords(q: string, limit = 30, language?: string): Promise<Word[]> {
   // Phrase-quote the query so user punctuation can't break FTS syntax.
   const sanitized = q.replace(/["*()]/g, " ").replace(/['-]/g, " ").trim();
   if (!sanitized) return [];
+  const filter = language ? "AND w.language = ?" : "";
   const rows = await qAll<WordRow>(
     `SELECT w.* FROM words_fts f
      JOIN words w ON w.id = f.rowid
-     WHERE words_fts MATCH ? AND w.status = 'published'
+     WHERE words_fts MATCH ? AND w.status = 'published' ${filter}
      ORDER BY rank LIMIT ?`,
-    [`"${sanitized}"`, limit]
+    language ? [`"${sanitized}"`, language, limit] : [`"${sanitized}"`, limit]
   );
   return rows.map(hydrate);
 }
 
 export type PopularityLens = "trending" | "endorsed" | "contested" | "verified";
 
-export async function popularity(lens: PopularityLens, limit = 10): Promise<Word[]> {
+export async function popularity(lens: PopularityLens, limit = 10, language?: string): Promise<Word[]> {
+  const langFilter = language ? " AND language = ?" : " ";
+  const wLangFilter = language ? " AND w.language = ?" : " ";
+  const langArgs = language ? [language] : [];
   let sql: string;
   switch (lens) {
     case "endorsed":
-      sql = `SELECT * FROM words WHERE status='published' AND use_votes > 0
+      sql = `SELECT * FROM words WHERE status='published'${langFilter} AND use_votes > 0
              ORDER BY use_votes DESC, work_votes ASC LIMIT ?`;
       break;
     case "contested":
       sql = `SELECT *, (use_votes * work_votes) AS heat FROM words
-             WHERE status='published' AND use_votes > 0 AND work_votes > 0
+             WHERE status='published'${langFilter} AND use_votes > 0 AND work_votes > 0
              ORDER BY heat DESC LIMIT ?`;
       break;
     case "verified":
-      sql = `SELECT * FROM words WHERE status='published'
+      sql = `SELECT * FROM words WHERE status='published'${langFilter}
              ORDER BY published_at DESC LIMIT ?`;
       break;
     case "trending":
@@ -247,11 +260,11 @@ export async function popularity(lens: PopularityLens, limit = 10): Promise<Word
                SELECT word_id, SUM(vote) AS points FROM votes
                WHERE created_at > datetime('now', '-7 days') GROUP BY word_id
              ) v ON v.word_id = w.id
-             WHERE w.status='published'
+             WHERE w.status='published'${wLangFilter}
              ORDER BY points DESC, w.published_at DESC LIMIT ?`;
       break;
   }
-  const rows = await qAll<WordRow>(sql, [limit]);
+  const rows = await qAll<WordRow>(sql, [...langArgs, limit]);
   return rows.map(hydrate);
 }
 

@@ -630,6 +630,69 @@ await testSeeds();
 await testCron();
 await testAdminWordManagement();
 await testAdminBatch();
+await testMultilingual();
+
+// ---------------------------------------------------------------------------
+// Multilingual phase 2: localized routes, style-D switcher, one-time
+// Accept-Language redirect, hreflang alternates, language guard on word pages.
+// Uses raw fetch (no cookie jar) so the redirect cookie never leaks into the
+// other suites' requests.
+async function testMultilingual() {
+  console.log("\nmultilingual (phase 2)");
+
+  const raw = async (path, { headers = {}, manual = false } = {}) => {
+    const res = await fetch(`${BASE}${path}`, {
+      headers,
+      redirect: manual ? "manual" : "follow",
+      signal: AbortSignal.timeout(60_000),
+    });
+    const text = await res.text();
+    return { status: res.status, text, location: res.headers.get("location") };
+  };
+  const DE_ACCEPT = { "Accept-Language": "de-DE,de;q=0.9" };
+
+  const redir = await raw("/", { headers: DE_ACCEPT, manual: true });
+  ok("first visit with German browser redirects to /de", redir.status >= 300 && redir.status < 400 && redir.location === "/de", `status ${redir.status}, location ${redir.location}`);
+
+  const sticky = await raw("/", { headers: { ...DE_ACCEPT, Cookie: "locale-pref=en" }, manual: true });
+  ok("stored locale choice wins (no redirect)", sticky.status === 200, `status ${sticky.status}`);
+
+  const seeds = await raw("/seeds", { headers: DE_ACCEPT, manual: true });
+  ok("EN-only pages never redirect", seeds.status === 200, `status ${seeds.status}`);
+
+  const de = await raw("/de");
+  ok("/de serves the German edition", de.status === 200 && de.text.includes("Wörter für das"), `status ${de.status}`);
+  ok("German page carries the language switcher to the other locales", de.text.includes('href="/es"') && de.text.includes('href="/fr"'));
+
+  const es = await raw("/es/criteria");
+  ok("/es/criteria serves Spanish criteria", es.status === 200 && es.text.includes("Puerta 1"), `status ${es.status}`);
+
+  const fr = await raw("/fr/about");
+  ok("/fr/about serves French methodology", fr.status === 200 && fr.text.includes("Wikipédia vérifie"), `status ${fr.status}`);
+
+  const deWord = await raw("/de/words/graywashing");
+  ok("EN-only word 404s under the German edition", deWord.status === 404, `status ${deWord.status}`);
+
+  const enWord = await raw("/words/graywashing");
+  ok(
+    "EN word page keeps canonical + x-default hreflang",
+    enWord.status === 200 && /hreflang="x-default"/i.test(enWord.text) && enWord.text.includes('rel="canonical"'),
+    `status ${enWord.status}`
+  );
+
+  const de404 = await raw("/de/nope-xyz");
+  ok("unknown path under a locale → 404", de404.status === 404, `status ${de404.status}`);
+
+  const enPrefix = await raw("/en/");
+  ok("/en/ prefix is not a route → 404", enPrefix.status === 404, `status ${enPrefix.status}`);
+
+  const sitemap = await raw("/sitemap.xml");
+  ok(
+    "sitemap contains localized URLs and hreflang alternates",
+    sitemap.status === 200 && sitemap.text.includes("<loc>https://www.ai-neologism.com/de</loc>") && sitemap.text.includes('hreflang="de"'),
+    `status ${sitemap.status}`
+  );
+}
 
 // cleanup of this run's data
 await cleanTestRows();

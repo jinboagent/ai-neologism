@@ -2,16 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { IconThumbDown, IconThumbUp } from "./icons";
+import { getDictionary } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/core";
 
 export function VoteWidget({
   slug,
   initialUse,
   initialWork,
+  locale = "en",
 }: {
   slug: string;
   initialUse: number;
   initialWork: number;
+  locale?: Locale;
 }) {
+  const t = getDictionary(locale);
   const [use, setUse] = useState(initialUse);
   const [work, setWork] = useState(initialWork);
   const [myVote, setMyVote] = useState<0 | 1 | -1>(0);
@@ -78,8 +83,8 @@ export function VoteWidget({
         }`}
       >
         <IconThumbUp />
-        I&apos;d use this word
-        <span aria-label={`${use} people would use this word`} className="tabular-nums">
+        {t.voteUse}
+        <span aria-label={t.voteUseAria(use)} className="tabular-nums">
           {use}
         </span>
       </button>
@@ -93,8 +98,8 @@ export function VoteWidget({
         }`}
       >
         <IconThumbDown />
-        Needs work
-        <span aria-label={`${work} people think it needs work`} className="tabular-nums">
+        {t.voteWork}
+        <span aria-label={t.voteWorkAria(work)} className="tabular-nums">
           {work}
         </span>
       </button>

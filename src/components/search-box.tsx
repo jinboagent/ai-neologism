@@ -3,10 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { IconSearch } from "./icons";
+import { getDictionary } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/core";
 
-export function SearchBox({ compact = false, initial = "" }: { compact?: boolean; initial?: string }) {
+export function SearchBox({ compact = false, initial = "", locale = "en" }: { compact?: boolean; initial?: string; locale?: Locale }) {
   const router = useRouter();
   const [q, setQ] = useState(initial);
+  const t = getDictionary(locale);
 
   return (
     <form
@@ -18,7 +21,7 @@ export function SearchBox({ compact = false, initial = "" }: { compact?: boolean
       }}
     >
       <label htmlFor="site-search" className="sr-only">
-        Search words and phenomena
+        {t.searchAria}
       </label>
       <div className="flex items-center rounded-lg border border-border bg-card focus-within:border-primary transition-colors">
         <IconSearch className="ml-3 h-4 w-4 text-muted-foreground shrink-0" />
@@ -27,14 +30,14 @@ export function SearchBox({ compact = false, initial = "" }: { compact?: boolean
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={compact ? "Search…" : 'Describe the phenomenon — e.g. "companies pretending to be ethical"'}
+          placeholder={compact ? t.searchCompact : t.searchPlaceholder}
           className={`w-full bg-transparent px-3 py-2 text-foreground placeholder:text-muted-foreground/70 outline-none ${compact ? "text-sm" : "text-base"}`}
         />
         <button
           type="submit"
           className="m-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-deep transition-colors cursor-pointer"
         >
-          Search
+          {t.searchButton}
         </button>
       </div>
     </form>
