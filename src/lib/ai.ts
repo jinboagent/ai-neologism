@@ -333,9 +333,13 @@ async function assertResolvedSafe(candidate: URL): Promise<void> {
   }
 }
 
-/** Validate a user-supplied link at ingestion time (e.g. when storing a seed),
- * long before anything ever fetches it. Throws BAD_URL; returns the parsed URL. */
-export function validatePublicUrl(raw: string): URL {
+/** Validate a user-supplied link at ingestion time (e.g. when storing a seed).
+ * N8 (security report 2026-11-14): when the hostname resolves, apply the same
+ * any-address private-IP check as fetchUrlContent, so a rebinding-style
+ * hostname (e.g. 127.0.0.1.nip.io) is rejected at ingestion. A name that does
+ * not resolve at all is not a security hole — the fetch will simply fail later
+ * — so it passes ingestion unchanged. Throws BAD_URL; returns the parsed URL. */
+export async function validatePublicUrl(raw: string): Promise<URL> {
   let target: URL;
   try {
     target = new URL(raw.trim());
@@ -343,6 +347,15 @@ export function validatePublicUrl(raw: string): URL {
     throw new Error("BAD_URL");
   }
   assertSafeTarget(target);
+  try {
+    const addresses = await dns.lookup(target.hostname, { all: true });
+    for (const a of addresses) {
+      if (isBlockedHost(a.address)) throw new Error("BAD_URL");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message === "BAD_URL") throw e; // our own private-IP rejection
+    // unresolvable hostname — not a security hole, defer to fetch time
+  }
   return target;
 }
 

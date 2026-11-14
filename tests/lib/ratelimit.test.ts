@@ -101,4 +101,10 @@ describe("voterFingerprint", () => {
     const b = voterFingerprint(request({ "x-forwarded-for": "203.0.113.2", "user-agent": "UA" }));
     expect(a).not.toBe(b);
   });
+
+  it("ignores the User-Agent (N10: IP-only identity — UA rotation must not mint identities)", async () => {
+    const a = voterFingerprint(request({ "x-forwarded-for": "203.0.113.7", "user-agent": "UA-A" }));
+    const b = voterFingerprint(request({ "x-forwarded-for": "203.0.113.7", "user-agent": "UA-B" }));
+    expect(a).toBe(b);
+  });
 });

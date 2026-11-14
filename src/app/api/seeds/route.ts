@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   if (!rawUrl) return NextResponse.json({ error: "URL_REQUIRED", message: "Paste a link to an article, thread, or paper." }, { status: 400 });
 
   try {
-    validatePublicUrl(rawUrl);
+    await validatePublicUrl(rawUrl);
   } catch {
     return NextResponse.json({ error: "BAD_URL", message: "That doesn't look like a public http(s) link." }, { status: 400 });
   }

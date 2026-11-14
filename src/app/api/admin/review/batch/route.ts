@@ -70,7 +70,13 @@ export async function POST(req: Request) {
       continue;
     }
 
-    await withTx(async (tx) => {
+    const alreadyDecided = await withTx(async (tx) => {
+      // Re-check status inside the transaction (the row was read outside it) so a
+      // concurrent decision can't double-credit the submitter's accepted_words.
+      const fresh = await tx.execute("SELECT status FROM words WHERE id = ?", [row.id]);
+      const current = fresh.rows[0] as unknown as { status: string } | undefined;
+      if (!current || current.status !== "in_review") return true;
+
       await tx.execute("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, 'admin', ?, ?)", [
         row.id,
         action === "approve" ? "approve" : "decline",
@@ -84,7 +90,12 @@ export async function POST(req: Request) {
       } else {
         await tx.execute("UPDATE words SET status='declined', return_notes=?, updated_at=datetime('now') WHERE id=?", [reason, row.id]);
       }
+      return false;
     });
+    if (alreadyDecided) {
+      results.push({ slug, ok: false, error: "ALREADY_DECIDED" });
+      continue;
+    }
 
     if (action === "approve") {
       approved += 1;

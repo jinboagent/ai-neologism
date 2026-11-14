@@ -84,6 +84,22 @@ async function req(method, path, { body, headers = {}, useJar = true, timeoutMs 
   return { status: res.status, json, text };
 }
 
+/**
+ * Log in as admin only when the jar doesn't already hold a session. The login
+ * limiter is 10/15min per fingerprint, and N10 (IP-only fingerprints) removed
+ * the per-run User-Agent escape — so suite sections must share the session
+ * instead of each burning a login.
+ */
+async function ensureAdminLogin() {
+  const session = await req("GET", "/api/admin/login");
+  if (session.json?.admin) return;
+  const login = await req("POST", "/api/admin/login", {
+    body: { username: ADMIN_USER, password: ADMIN_PASS },
+    headers: { "x-cron-secret": CRON_SECRET, "User-Agent": `zztest-suite-${TS}` },
+  });
+  ok("admin session established", login.status === 200, `got ${login.status}`);
+}
+
 const PRIVATE_FIELDS = ["contributor_key_hash", "contact_email", "editor_key_hash"];
 function assertNoPrivateFields(name, payload) {
   const raw = typeof payload === "string" ? payload : JSON.stringify(payload);
@@ -101,6 +117,12 @@ const CLEANUP_SQL = [
   "DELETE FROM reviews WHERE word_id IN (SELECT id FROM words WHERE word LIKE 'zztest%')",
   "DELETE FROM words WHERE word LIKE 'zztest%'",
   "DELETE FROM seeds WHERE url LIKE 'https://zztest-%'",
+  // The admin-login limiter is per fingerprint with a 15-minute window; the
+  // harness logs in on every run from one local identity, so repeated runs
+  // within the window would 429 the whole admin chain. Not a product gap —
+  // harness hygiene.
+  "DELETE FROM rate_limits WHERE identity LIKE 'adminlogin:%'",
+  "DELETE FROM rate_limits WHERE identity LIKE 'submit:%'",
 ];
 async function cleanTestRows() {
   if (!fs.existsSync(dbFile)) return;
@@ -354,13 +376,14 @@ async function testApiChannelAndAdmin() {
 
   const wrongPass = await req("POST", "/api/admin/login", {
     body: { username: ADMIN_USER, password: "definitely-wrong" },
-    headers: { "User-Agent": `zztest-suite-${TS}` },
+    headers: { "x-cron-secret": CRON_SECRET, "User-Agent": `zztest-suite-${TS}` },
     useJar: false,
   });
   ok("wrong password → 401", wrongPass.status === 401, `got ${wrongPass.status}`);
 
   const login = await req("POST", "/api/admin/login", {
     body: { username: ADMIN_USER, password: ADMIN_PASS },
+    headers: { "x-cron-secret": CRON_SECRET },
     headers: { "User-Agent": `zztest-suite-${TS}` },
   });
   ok("admin login → session cookie", login.status === 200 && jar.has("admin_session"), `got ${login.status}`);
@@ -485,11 +508,7 @@ await testCommunityReview(ctx);
 await testApiChannelAndAdmin();
 async function testAdminWordManagement() {
   section("J. Admin word management");
-  const login = await req("POST", "/api/admin/login", {
-    body: { username: ADMIN_USER, password: ADMIN_PASS },
-    headers: { "User-Agent": `zztest-suite-${TS}` },
-  });
-  ok("admin login for management", login.status === 200);
+  await ensureAdminLogin();
 
   const sub = await req("POST", "/api/words", {
     headers: { "X-Contribution-Key": `ck_zztest_manage_${TS}` },
@@ -536,11 +555,7 @@ async function testAdminWordManagement() {
 
 async function testAdminBatch() {
   section("K. Admin batch operations");
-  const login = await req("POST", "/api/admin/login", {
-    body: { username: ADMIN_USER, password: ADMIN_PASS },
-    headers: { "User-Agent": `zztest-suite-${TS}` },
-  });
-  ok("admin login for batch", login.status === 200);
+  await ensureAdminLogin();
 
   // Three queue words through the API channel (A+B for batch approve, C for the
   // partial batch, D for the batch reject — each decision needs its own word).

@@ -1,7 +1,7 @@
 import { ensureSchema, qAll, qGet, qRun } from "@/lib/db";
 import type { WordRow } from "@/lib/words";
 
-const TABLES = ["votes", "reviews", "revisions", "words", "keys", "concepts"] as const;
+const TABLES = ["votes", "reviews", "revisions", "words", "keys", "concepts", "rate_limits"] as const;
 
 /** Wipe every table so each test starts from an empty dictionary. */
 export async function resetDb(): Promise<void> {

@@ -53,6 +53,13 @@ export async function rateLimit(identity: string, limit: number, windowMs: numbe
 /**
  * Caller fingerprint for rate limits and vote de-duplication.
  *
+ * N10 (security report 2026-11-14, owner decision): the fingerprint is the IP
+ * ALONE. The previous `ip|user-agent` mix let an attacker mint a fresh
+ * identity per request by rotating the client-controlled User-Agent,
+ * weakening both vote de-duplication and the per-identity rate limits.
+ * Trade-off (accepted by the owner): users behind one NAT now share a single
+ * vote/rate-limit identity.
+ *
  * The client-controlled `X-Forwarded-For` header is trusted ONLY when the
  * operator sets TRUST_PROXY=true (i.e. the app runs behind a platform such as
  * Vercel that overwrites/appends the real client IP). Without it — the default
@@ -73,6 +80,5 @@ export function voterFingerprint(req: Request): string {
       ip = real ?? "unknown";
     }
   }
-  const ua = req.headers.get("user-agent") ?? "unknown";
-  return crypto.createHash("sha256").update(`${ip}|${ua}`).digest("hex");
+  return crypto.createHash("sha256").update(ip).digest("hex");
 }

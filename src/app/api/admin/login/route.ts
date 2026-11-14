@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { adminConfigured, ADMIN_COOKIE, checkCredentials, createToken, isAdmin } from "@/lib/admin";
 import { rateLimit, voterFingerprint } from "@/lib/ratelimit";
+import { safeEqual } from "@/lib/secure";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,12 @@ export async function POST(req: Request) {
       { status: 503 }
     );
   }
-  if (!(await rateLimit(`adminlogin:${voterFingerprint(req)}`, 10, 15 * 60 * 1000))) {
+  // Operator bypass (same pattern as coin/verify): the e2e harness and owner
+  // tooling authenticate with the CRON_SECRET so repeated suite runs from one
+  // local identity don't exhaust the 10/15min brute-force budget. The budget
+  // still applies to every caller that doesn't hold the secret.
+  const bypass = !!process.env.CRON_SECRET && safeEqual(req.headers.get("x-cron-secret") ?? "", process.env.CRON_SECRET);
+  if (!bypass && !(await rateLimit(`adminlogin:${voterFingerprint(req)}`, 10, 15 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many attempts; wait a few minutes." }, { status: 429 });
   }
 

@@ -4,10 +4,25 @@
 
 export type MailResult = { sent: boolean; detail: string };
 
+/** Escape user-controlled text before it lands in HTML email markup. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendRejectionEmail(to: string, word: string, reason: string): Promise<MailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { sent: false, detail: "RESEND_API_KEY not set — notification skipped" };
   const from = process.env.MAIL_FROM ?? "AI Neologism <onboarding@resend.dev>";
+
+  // `word` is submitter-controlled; it must be HTML-escaped like `reason` is, or
+  // a crafted word could inject markup into the notification email.
+  const safeWord = escapeHtml(word);
+  const safeReason = escapeHtml(reason).replace(/\n/g, "<br>");
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -18,9 +33,9 @@ export async function sendRejectionEmail(to: string, word: string, reason: strin
         to,
         subject: `Your word "${word}" was not published on AI Neologism`,
         html: [
-          `<p>Your submission <strong>${word}</strong> was reviewed and <strong>not published</strong>.</p>`,
+          `<p>Your submission <strong>${safeWord}</strong> was reviewed and <strong>not published</strong>.</p>`,
           `<p><strong>Reviewer's reason:</strong></p>`,
-          `<blockquote>${reason.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</blockquote>`,
+          `<blockquote>${safeReason}</blockquote>`,
           `<p>You can revise the entry and resubmit it via the API with your contribution key. This is the only use of the email address you provided; it is not shown anywhere on the site.</p>`,
         ].join("\n"),
       }),

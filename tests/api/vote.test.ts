@@ -1,11 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/words/[slug]/vote/route";
 import { getDb } from "@/lib/db";
 import { fetchWordRow, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 
 beforeEach(async () => {
+  // N10 (IP-only fingerprints): the voters below distinguish themselves by
+  // distinct x-forwarded-for IPs, which are only honoured behind a trusted
+  // proxy — same stub pattern as ratelimit.test.ts.
+  vi.stubEnv("TRUST_PROXY", "true");
   await resetDb();
   await insertWord({ slug: "pub", word: "pub", status: "published" });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 let ipSeq = 0;

@@ -64,7 +64,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "SELF_REVIEW", message: "You cannot review your own submission." }, { status: 403 });
   }
 
-  await withTx(async (tx) => {
+  // The word was read above, *outside* the transaction. Re-check its status
+  // inside the transaction so two concurrent reviewers can't both read
+  // 'in_review' and both approve the same word — which would double-write the
+  // review log and double-credit the submitter's accepted_words.
+  const alreadyDecided = await withTx(async (tx) => {
+    const fresh = await tx.execute("SELECT status FROM words WHERE id = ?", [word.id]);
+    const current = fresh.rows[0] as unknown as { status: string } | undefined;
+    if (!current || current.status !== "in_review") return true;
+
     await tx.execute("INSERT INTO reviews (word_id, reviewer_key_hash, action, reason) VALUES (?, ?, ?, ?)", [
       word.id,
       reviewer,
@@ -81,7 +89,11 @@ export async function POST(req: Request) {
     } else {
       await tx.execute("UPDATE words SET status='declined', return_notes=?, updated_at=datetime('now') WHERE id=?", [cleanReason, word.id]);
     }
+    return false;
   });
+  if (alreadyDecided) {
+    return NextResponse.json({ error: "ALREADY_DECIDED", message: "This word was already reviewed." }, { status: 409 });
+  }
 
   return NextResponse.json({
     slug,

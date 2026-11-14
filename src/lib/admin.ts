@@ -5,6 +5,7 @@
 
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
+import { safeEqual } from "./secure";
 
 export const ADMIN_COOKIE = "admin_session";
 const SESSION_DAYS = 7;
@@ -47,11 +48,14 @@ export function verifyToken(token: string | undefined | null): boolean {
 export function checkCredentials(username: string, password: string): boolean {
   const u = process.env.ADMIN_USERNAME ?? "";
   const p = process.env.ADMIN_PASSWORD ?? "";
-  // Compare digests, not raw strings: fixed-length inputs for timingSafeEqual,
-  // so the candidate's length is not observable through early exits.
+  // Compare fixed-length digests with a constant-time comparison. Buffer.equals
+  // short-circuits on the first differing byte, which leaks position via timing;
+  // timingSafeEqual (via safeEqual) does not. Digest first so inputs are always
+  // the same length and the candidate's length is not observable through early
+  // exits.
   const h = (s: string) => crypto.createHash("sha256").update(s).digest();
-  const userOk = h(username).equals(h(u));
-  const passOk = h(password).equals(h(p));
+  const userOk = safeEqual(h(username).toString("hex"), h(u).toString("hex"));
+  const passOk = safeEqual(h(password).toString("hex"), h(p).toString("hex"));
   return userOk && passOk;
 }
 

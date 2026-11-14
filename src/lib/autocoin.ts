@@ -147,37 +147,53 @@ export async function coinDaily(count: number): Promise<CoinReport> {
       continue;
     }
 
-    const slug = await uniqueSlug(chosen.word);
-    const relatedSlugs: string[] = [];
-    for (const w of chosen.related_concepts) {
-      const s = slugify(w);
-      if (s && (await qGet("SELECT 1 FROM words WHERE slug = ? AND status = 'published'", [s]))) relatedSlugs.push(s);
-    }
-    const info = await qRun(
-      `INSERT INTO words (slug, word, pronunciation, definition, explanation, why_this_word,
+    // N6 (security report 2026-11-14): the auto-coin path selects its slug
+    // outside a transaction (unlike POST /api/words), so two concurrent runs
+    // can pick the same slug and the second INSERT hits the UNIQUE constraint.
+    // Retry with a fresh slug instead of letting the exception abort the whole
+    // cron run — the constraint itself already protects integrity.
+    let slug = "";
+    let wordId = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      slug = await uniqueSlug(chosen.word);
+      try {
+        const relatedSlugs: string[] = [];
+        for (const w of chosen.related_concepts) {
+          const s = slugify(w);
+          if (s && (await qGet("SELECT 1 FROM words WHERE slug = ? AND status = 'published'", [s]))) relatedSlugs.push(s);
+        }
+        const info = await qRun(
+          `INSERT INTO words (slug, word, pronunciation, definition, explanation, why_this_word,
         alternatives_json, verification_json, references_json, related_words, categories_json,
         ai_assisted, status, badge, input_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'in_review', ?, 'auto')`,
-      [
-        slug,
-        chosen.word,
-        chosen.pronunciation || null,
-        chosen.suggested_definition,
-        "",
-        `${chosen.rationale}\n\nEtymology: ${chosen.etymology}`,
-        JSON.stringify(others),
-        JSON.stringify(verification),
-        JSON.stringify(reference ? [reference] : []),
-        // Related words are best-effort: keep only suggestions that name existing
-        // entries, so no word page ever links into a 404.
-        JSON.stringify(relatedSlugs),
-        // Categories are pre-selected by the coiner (protocol §2 rule 9).
-        JSON.stringify(chosen.categories),
-        badgeFromVerdict(verification.verdict),
-      ]
-    );
+          [
+            slug,
+            chosen.word,
+            chosen.pronunciation || null,
+            chosen.suggested_definition,
+            "",
+            `${chosen.rationale}\n\nEtymology: ${chosen.etymology}`,
+            JSON.stringify(others),
+            JSON.stringify(verification),
+            JSON.stringify(reference ? [reference] : []),
+            // Related words are best-effort: keep only suggestions that name existing
+            // entries, so no word page ever links into a 404.
+            JSON.stringify(relatedSlugs),
+            // Categories are pre-selected by the coiner (protocol §2 rule 9).
+            JSON.stringify(chosen.categories),
+            badgeFromVerdict(verification.verdict),
+          ]
+        );
+        wordId = info.lastInsertRowid;
+        break;
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("UNIQUE constraint failed: words.slug") && attempt < 4) continue;
+        throw e;
+      }
+    }
     await qRun("INSERT INTO revisions (word_id, editor_key_hash, summary, snapshot_json) VALUES (?, NULL, 'Auto-coined daily run', '{}')", [
-      info.lastInsertRowid,
+      wordId,
     ]);
 
     // Bookkeeping: mark the seed this came from as coined.

@@ -8,10 +8,12 @@ type SeedRow = { id: number; contributor_key_hash: string };
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const numId = Number(id);
+  if (!Number.isFinite(numId)) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   const keyHash = await resolveKeyHash(req);
   if (!keyHash) return NextResponse.json({ error: "NO_KEY" }, { status: 401 });
 
-  const seed = await qGet<SeedRow>("SELECT id, contributor_key_hash FROM seeds WHERE id = ?", [Number(id)]);
+  const seed = await qGet<SeedRow>("SELECT id, contributor_key_hash FROM seeds WHERE id = ?", [numId]);
   if (!seed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (seed.contributor_key_hash !== keyHash) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
@@ -23,10 +25,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 /** Mark a seed coined (with the produced word slug) or move it back to pending. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const numId = Number(id);
+  if (!Number.isFinite(numId)) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   const keyHash = await resolveKeyHash(req);
   if (!keyHash) return NextResponse.json({ error: "NO_KEY" }, { status: 401 });
 
-  const seed = await qGet<SeedRow>("SELECT id, contributor_key_hash FROM seeds WHERE id = ?", [Number(id)]);
+  const seed = await qGet<SeedRow>("SELECT id, contributor_key_hash FROM seeds WHERE id = ?", [numId]);
   if (!seed) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (seed.contributor_key_hash !== keyHash) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
