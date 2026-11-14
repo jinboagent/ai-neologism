@@ -83,6 +83,23 @@ describe("compact / validatedComponents", () => {
   it("needs at least two components", () => {
     expect(validatedComponents(W("bedonly", "bed"))).toBeNull();
   });
+  it("validates accented and hyphenated compounds via accent folding; blends still fail", () => {
+    expect(validatedComponents(W("vozherencia", "voz + herencia; el audio que reclama a su ausente"))).toEqual([
+      "voz",
+      "herencia",
+    ]);
+    expect(validatedComponents(W("Chatversteinerung", "Chat + Versteinerung; der eingebaute alte Gruppenname"))).toEqual([
+      "chat",
+      "versteinerung",
+    ]);
+    expect(validatedComponents(W("Jawort-Schleicher", "Jawort + Schleicher; dem Ringtausch ausweichen"))).toEqual([
+      "jawort",
+      "schleicher",
+    ]);
+    expect(compact("Cousinenkasse")).toBe("cousinenkasse");
+    // alliésquive is a blend (the é swallows esquive's first e) — like screbgret, no exact rebuild.
+    expect(validatedComponents(W("alliésquive", "allié + esquive; esquive des alliances"))).toBeNull();
+  });
 });
 
 describe("buildFamilies", () => {

@@ -67,7 +67,9 @@ function randInt(maxExclusive: number, rng: Rng): number {
 // ---------- why_this_word parsing ----------
 
 const CUT = /[;—–:(]/;
-const COMPONENT_OK = /^[A-Za-z][A-Za-z\s\-']{0,24}$/;
+// Unicode-aware: accented morphemes (allién, Canción, Schleicher) must parse —
+// the lexicon is four languages, not ASCII-only English.
+const COMPONENT_OK = /^[^\W\d_](?:[^\W\d_\s]|[\s\-'])*$/u;
 
 /** Extract raw components from "A + B (+C); reason…" style strings. */
 export function parseComponents(why: string): string[] {
@@ -87,19 +89,26 @@ export function parseComponents(why: string): string[] {
   return out;
 }
 
+/** Lowercase, fold accents, keep a-z only — the comparison space for morphemes. */
 export function compact(s: string): string {
-  return s.toLowerCase().replace(/[^a-z]/g, "");
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/g, "");
 }
 
 /**
- * Components whose compact concatenation rebuilds the word exactly. Parity with
- * the prototype: the comparison is against the raw lowercased word, so
- * hyphenated coinages never validate (they stay out of fusion/reverse).
+ * Components whose compact concatenation rebuilds the word exactly. Compacted
+ * on BOTH sides: accents (alliésquive) and hyphens (Jawort-Schleicher) fold
+ * away, so non-English coinages validate too — that is what fuels the
+ * multilingual morpheme games. (The prototype compared the raw lowercased
+ * word, which silently excluded every hyphenated/accented coinage.)
  */
 export function validatedComponents(w: GameWord): string[] | null {
   const comps = parseComponents(w.why);
   if (comps.length < 2) return null;
-  if (comps.map(compact).join("") === w.word.toLowerCase()) return comps;
+  if (comps.map(compact).join("") === compact(w.word)) return comps;
   return null;
 }
 
