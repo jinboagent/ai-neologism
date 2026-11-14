@@ -72,6 +72,40 @@ export async function HomePage({ locale }: { locale: Locale }) {
         </div>
       </section>
 
+      {/* Games — the playful side of the lexicon; rounds are computed live
+          per language from the published words. */}
+      <section className="mx-auto max-w-6xl px-4 pt-6">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold">{t.games.hubTitle}</h2>
+          <Link href={localePath(locale, "/games")} className="text-sm text-primary hover:underline">
+            {t.games.allGames}
+          </Link>
+        </div>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t.games.hubSub}</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            { emoji: "🧠", title: t.games.cardMeaningTitle, desc: t.games.cardMeaningDesc, href: "/games/meaning-reveal" },
+            { emoji: "🎭", title: t.games.cardRealOrFakeTitle, desc: t.games.cardRealOrFakeDesc, href: "/games/real-or-fake" },
+            { emoji: "🧩", title: t.games.cardCategoryTitle, desc: t.games.cardCategoryDesc, href: "/games/category-sort" },
+            { emoji: "🔥", title: t.games.cardSemanticTitle, desc: t.games.cardSemanticDesc, href: "/games/semantic-ladder" },
+            { emoji: "🏛️", title: t.games.cardVaultTitle, desc: t.games.cardVaultDesc, href: "/games/ancient-vault" },
+          ].map((card) => (
+            <Link
+              key={card.href}
+              href={localePath(locale, card.href)}
+              className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{card.emoji}</span>
+                <span className="font-semibold">{card.title}</span>
+              </div>
+              <p className="mt-1.5 text-sm text-muted-foreground">{card.desc}</p>
+              <span className="mt-2 inline-block text-sm font-medium text-primary">{t.games.playCta}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <section className="mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-bold">{trending.length > 0 ? t.homeTrending : t.homeRecent}</h2>

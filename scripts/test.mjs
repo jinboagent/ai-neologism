@@ -631,6 +631,7 @@ await testCron();
 await testAdminWordManagement();
 await testAdminBatch();
 await testMultilingual();
+await testGames();
 
 // ---------------------------------------------------------------------------
 // Multilingual phase 2: localized routes, style-D switcher, one-time
@@ -720,6 +721,71 @@ async function testMultilingual() {
     `status ${badGrammar.status}`
   );
 }
+
+// Games: the hub and per-game pages exist in all four locales, computed live
+// from each language's published words, with per-game availability fallbacks.
+async function testGames() {
+  console.log("\ngames");
+
+  const raw = async (path, { headers = {}, manual = false } = {}) => {
+    const res = await fetch(`${BASE}${path}`, {
+      headers,
+      redirect: manual ? "manual" : "follow",
+      signal: AbortSignal.timeout(60_000),
+    });
+    const text = await res.text();
+    return { status: res.status, text, location: res.headers.get("location") };
+  };
+
+  const hub = await raw("/games");
+  ok(
+    "games hub serves in English with the five game cards",
+    hub.status === 200 && hub.text.includes("What does it mean?") && hub.text.includes("The Antiquarium"),
+    `status ${hub.status}`
+  );
+
+  const deHub = await raw("/de/games");
+  ok("/de/games serves the German hub", deHub.status === 200 && deHub.text.includes("Spiel mit KI-geprägten Wörtern"), `status ${deHub.status}`);
+
+  const esHub = await raw("/es/games");
+  ok("/es/games serves the Spanish hub", esHub.status === 200 && esHub.text.includes("Juega con palabras acuñadas"), `status ${esHub.status}`);
+
+  const frHub = await raw("/fr/games");
+  ok("/fr/games serves the French hub", frHub.status === 200 && frHub.text.includes("Joue avec des mots forgés"), `status ${frHub.status}`);
+
+  const mr = await raw("/games/meaning-reveal");
+  ok("meaning-reveal serves the daily loop with a real word", mr.status === 200 && mr.text.includes("Reveal the meaning"), `status ${mr.status}`);
+
+  const rof = await raw("/games/real-or-fake");
+  ok("real-or-fake serves rounds with decoys", rof.status === 200 && rof.text.includes("Real or Fake?"), `status ${rof.status}`);
+
+  const cs = await raw("/games/category-sort");
+  ok("category-sort serves a fresh board", cs.status === 200 && cs.text.includes("Sort the Lexicon"), `status ${cs.status}`);
+
+  const sl = await raw("/games/semantic-ladder");
+  ok("semantic-ladder serves the demo board", sl.status === 200 && sl.text.includes("Warm or Cold?"), `status ${sl.status}`);
+
+  const av = await raw("/games/ancient-vault");
+  ok(
+    "ancient-vault serves the Sator square and the word chain",
+    av.status === 200 && av.text.includes("The Square of Five Words") && av.text.includes("Word Chain"),
+    `status ${av.status}`
+  );
+
+  const deMr = await raw("/de/games/meaning-reveal");
+  ok("German meaning-reveal renders German UI strings", deMr.status === 200 && deMr.text.includes("Bedeutung enthüllen"), `status ${deMr.status}`);
+
+  const deAv = await raw("/de/games/ancient-vault");
+  ok("German vault hides the why_this_word games (note instead)", deAv.status === 200 && deAv.text.includes("Fusionsrätsel"), `status ${deAv.status}`);
+
+  const bad = await raw("/games/nope-xyz");
+  ok("unknown game slug → 404", bad.status === 404, `status ${bad.status}`);
+
+  const redir = await raw("/games", { headers: { "Accept-Language": "de-DE,de;q=0.9" }, manual: true });
+  ok("games hub participates in the Accept-Language redirect", redir.status >= 300 && redir.status < 400 && redir.location === "/de/games", `status ${redir.status}, location ${redir.location}`);
+}
+
+// ---------------------------------------------------------------------------
 
 // cleanup of this run's data
 await cleanTestRows();

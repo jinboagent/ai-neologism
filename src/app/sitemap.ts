@@ -18,13 +18,14 @@ const CHROME: { path: string; changeFrequency: MetadataRoute.Sitemap[number]["ch
   { path: "/", changeFrequency: "daily", priority: 1 },
   { path: "/index", changeFrequency: "daily", priority: 0.9 },
   { path: "/popularity", changeFrequency: "daily", priority: 0.7 },
+  { path: "/games", changeFrequency: "daily", priority: 0.7 },
   { path: "/seeds", changeFrequency: "daily", priority: 0.6 },
   { path: "/contribute", changeFrequency: "weekly", priority: 0.6 },
   { path: "/sources", changeFrequency: "weekly", priority: 0.5 },
   { path: "/criteria", changeFrequency: "monthly", priority: 0.5 },
   { path: "/about", changeFrequency: "monthly", priority: 0.5 },
 ];
-const LOCALIZED = new Set(["/", "/index", "/popularity", "/criteria", "/about"]);
+const LOCALIZED = new Set(["/", "/index", "/popularity", "/games", "/criteria", "/about"]);
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const rows = await qAll<{ slug: string; language: string; concept_id: number | null; updated_at: string }>(

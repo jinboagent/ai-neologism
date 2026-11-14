@@ -17,6 +17,7 @@ const LOCALIZED_PATHS: RegExp[] = [
   /^\/popularity(\/|$)/,
   /^\/about(\/|$)/,
   /^\/criteria(\/|$)/,
+  /^\/games(\/|$)/,
   /^\/words\/[^/]+$/,
 ];
 

@@ -239,4 +239,200 @@ export const fr: Dictionary = {
   critPracticeH: "Le voir en pratique",
   critPractice:
     "La chaîne, les badges et l'échelle de participation sont sur la [[page à propos|/about]]. Tu crois avoir repéré un phénomène sans nom ? [[Forge un mot →|/contribute]]",
+
+  /* ---- games ---- */
+  navGames: "Jeux",
+  metaGamesTitle: "Jeux — joue avec des mots forgés par l'IA",
+  metaGamesDesc:
+    "Cinq jeux de mots calculés en direct depuis le lexique publié : devine le sens, démasque la fausse définition, trie les catégories, gravit l'échelle sémantique et rejoue cinq mécaniques antiques.",
+  metaMeaningRevealTitle: "Que signifie-t-il ? — le jeu de devinettes quotidien",
+  metaMeaningRevealDesc:
+    "Un mot forgé par l'IA à chaque tour. Jette un œil aux morphèmes, devine le sens avec tes mots, clique pour révéler la vraie définition et la raison de la forge.",
+  metaRealOrFakeTitle: "Vraie ou fausse ? — le jeu des définitions",
+  metaRealOrFakeDesc:
+    "Quatre définitions d'un mot forgé par l'IA — une vraie, trois leurres empruntés à d'autres vraies entrées. Sauras-tu trouver la vérité ?",
+  metaCategorySortTitle: "Trie le lexique — le jeu des catégories",
+  metaCategorySortDesc:
+    "Seize mots tout juste forgés, quatre catégories cachées, quatre vies. Un plateau façon Connections reconstruit à partir des vraies catégories du lexique, à chaque chargement.",
+  metaSemanticLadderTitle: "Chaud ou froid ? — l'échelle sémantique",
+  metaSemanticLadderDesc:
+    "Un mot caché de l'IA, une banque de mots du quotidien, des scores de proximité de 0 à 100. Gravis l'échelle par le sens seul.",
+  metaAncientVaultTitle: "L'Antiquarium — jeux de mots antiques, carburant neuf",
+  metaAncientVaultDesc:
+    "Le carré Sator de Pompéi, les énigmes de fusion Lihe, le Feihualing des Tang, les devinettes inversées et les chaînes de mots — cinq mécaniques millénaires avec des mots qui n'existaient pas il y a trois ans.",
+  games: {
+    backToGames: "← Tous les jeux",
+    hubTitle: "Joue avec des mots forgés par l'IA",
+    hubSub:
+      "Cinq jeux calculés en direct depuis le lexique publié — chaque manche est générée à neuf à partir de vraies entrées, et le mot du jour est le même pour tout le monde.",
+    statWords: (n: number) => `${n} mots`,
+    statFamilies: (n: number) => `${n} familles de morphèmes`,
+    statCategories: (n: number) => `${n} catégories`,
+    statDaily: "☀️ un mot du jour",
+    howToPlay: "Comment jouer",
+    unavailable: "Ce jeu n'a pas encore assez de mots publiés dans cette langue.",
+    playCta: "Jouer →",
+    enterVaultCta: "Entrer dans l'Antiquarium →",
+    allGames: "Tous les jeux →",
+
+    cardMeaningTitle: "Que signifie-t-il ?",
+    cardMeaningDesc:
+      "La boucle quotidienne de base : d'abord le mot du jour, puis l'entraînement au hasard. Regarde les morphèmes, devine le sens avec tes mots, clique pour révéler.",
+    cardMeaningOrigin: "Origine : ton idée — la boucle quotidienne de base",
+    cardRealOrFakeTitle: "Vraie ou fausse ?",
+    cardRealOrFakeDesc:
+      "Quatre définitions, une vraie — les leurres sont des définitions d'autres vrais mots du lexique.",
+    cardRealOrFakeOrigin: "Origine : Balderdash / Fictionary, remix en solo",
+    cardCategoryTitle: "Trie le lexique",
+    cardCategoryDesc:
+      "Seize mots, quatre vraies catégories, quatre vies. Le plateau se reconstruit à chaque chargement — aucune visite ne ressemble à la précédente.",
+    cardCategoryOrigin: "Origine : NYT Connections, édition lexique",
+    cardSemanticTitle: "Chaud ou froid ?",
+    cardSemanticDesc:
+      "Gravis une échelle de similarité sémantique vers un mot caché. Plateau de démonstration aux scores simulés — la vraie version exige des embeddings de mots.",
+    cardSemanticOrigin: "Origine : Semantle / Contexto, édition word2vec",
+    cardVaultTitle: "L'Antiquarium",
+    cardVaultDesc:
+      "Cinq mécaniques antiques à carburant frais : le carré Sator de Pompéi, les énigmes de fusion Lihe, le Feihualing des Tang, les devinettes inversées et la chaîne de mots — manches calculées en direct.",
+    cardVaultOrigin: "Origine : 2 000 ans de jeux de mots · Rome · Han · Tang · Angleterre · Japon/Corée",
+
+    mrIntro:
+      "La boucle quotidienne de base. Le premier mot est ☀️ le mot du jour — le même pour tous. Personne n'a jamais vu ces forges. Devine ce qu'il doit signifier, puis clique pour révéler.",
+    mrRules: [
+      "Lis le mot. Il est réel, il est publié, et il est tout neuf.",
+      "Jette un œil aux morphèmes (les deux vieux mots fondus à l'intérieur) — c'est ton seul indice.",
+      "Écris ta supposition avec tes mots, ou garde-la simplement en tête.",
+      "Clique sur « Révéler le sens ». La vraie définition et la raison de la forge apparaissent.",
+      "Note-toi honnêtement : 🎯 dans le mille · ≈ tiède · 🤷 aucune idée.",
+      "☀️ Le premier mot est le mot du jour (identique pour tous) ; « Mot suivant » distribue l'entraînement au hasard.",
+    ],
+    mrShowHint: "👀 Voir l'indice de morphèmes",
+    mrHideHint: "🙈 Cacher l'indice de morphèmes",
+    mrGuessPlaceholder: "Ta supposition, avec tes mots (facultatif, mais amusant à comparer après la révélation)…",
+    mrReveal: "Révéler le sens",
+    mrRevealedHeading: "✓ Le vrai sens",
+    mrHowClose: "À quel point étais-tu proche ?",
+    mrNailed: "🎯 Dans le mille",
+    mrWarm: "≈ Tiède",
+    mrNoIdea: "🤷 Aucune idée",
+    mrScored: (emoji: string) => `Noté : ${emoji} — les séries et les cartes à partager arrivent.`,
+    mrNext: "Mot suivant →",
+    mrFooter: "Données en direct · premier mot = le mot du jour",
+
+    rofIntro:
+      "Quatre définitions d'un mot forgé par l'IA. L'une est la vraie définition publiée — les trois autres sont des leurres : des définitions d'autres vrais mots du lexique (l'amélioration prévue : des leurres issus des candidats rejetés par l'IA elle-même).",
+    rofRules: [
+      "Un mot apparaît avec quatre définitions, A–D.",
+      "L'une est vraie — la définition publiée dans le lexique.",
+      "Trois sont des leurres. Au Balderdash classique, des humains inventaient des faux ; la v0 emprunte des définitions d'autres vraies entrées.",
+      "Choisis-en une. Juste : le mot rejoint ta série. Faux : tu vois pourquoi la vraie l'a emporté.",
+      "En production : une série quotidienne de cinq manches, des séries et une grille partageable.",
+    ],
+    rofRound: (i: number, n: number) => `Manche ${i} / ${n}`,
+    rofCorrect: (n: number) => `Justes : ${n}`,
+    rofNext: "Manche suivante →",
+    rofSeeResult: "Voir le résultat →",
+    rofCalledIt: "tu l'as démasquée.",
+    rofGotYou: "le leurre t'a eu.",
+    rofEnd: (c: number, n: number) =>
+      `Banque de démonstration terminée — ${c}/${n} de justes. 🎯 En production : un cinq du jour tout frais, des séries et une grille partageable.`,
+    rofFooter: "Données en direct · leurres = définitions d'autres vrais mots (v0)",
+
+    csIntro:
+      "Seize mots tout juste forgés. Quatre catégories cachées, quatre mots chacune. Les catégories sont les vraies du lexique lui-même — trouve les familles.",
+    csRules: [
+      "Sélectionne 4 mots qui partagent selon toi une catégorie, puis valide.",
+      "Correct → la famille se verrouille. Faux → tu perds une des quatre vies.",
+      "Le piège : plusieurs mots pourraient vraisemblablement siéger dans deux groupes — les vraies catégories du lexique gardent le jeu honnête.",
+      "Le plateau se reconstruit à chaque chargement de page.",
+    ],
+    csSelected: (n: number) => `${n} sélectionnés`,
+    csSubmit: "Valider",
+    csClear: "Effacer",
+    csPlayAgain: "Rejouer",
+    csLocked: (name: string) => `✓ ${name} verrouillée.`,
+    csWrong: "✗ Pas une famille — une vie en moins.",
+    csPerfect: "Tri parfait ! 🧩",
+    csOutOfLives: (names: string) => `Plus de vies. Les familles restantes : ${names}`,
+    csFooter: "Données en direct · plateau construit automatiquement à partir des vraies catégories du lexique — neuf à chaque chargement",
+
+    slIntro:
+      "Un mot caché forgé par l'IA. Clique des mots de la banque — ou tape les tiens — et reçois un score de proximité sémantique de 0 à 100. Gravis l'échelle par le sens seul. Aucune orthographe à épeler : c'est exactement ainsi que naissent les mots nouveaux.",
+    slRules: [
+      "Un mot est caché. Il est réel et publié — tu ignores seulement lequel.",
+      "Clique un mot de la banque (ou tape le tien). 100 = sémantiquement identique, 0 = sans rapport.",
+      "Réchauffe-toi : l'échelle trie tes essais ; suis la chaleur vers le concept caché.",
+      "Révéler se débloque après 3 essais — mérité ou abandonné, les deux montrent la vérité.",
+      "Cette démonstration simule les scores — la vraie version exige des embeddings de mots.",
+    ],
+    slHiddenPrefix: "Le mot caché est ",
+    slLetters: (n: number) => `????? (${n} lettres)`,
+    slInputPlaceholder: "Facultatif : tape un mot et appuie sur Entrée…",
+    slGuess: "Essayer",
+    slRevealLocked: "Révéler (3 essais requis)",
+    slRevealReady: "Révéler le mot",
+    slNext: "Mot caché suivant →",
+    whyPrefix: "Pourquoi l'IA l'a forgé : ",
+    slFooter: "Plateau de démonstration · mots du vrai lexique, scores simulés (embeddings à venir)",
+
+    avIntro:
+      "Cinq mécaniques de jeu millénaires, rejouées avec des mots qui n'existaient pas il y a trois ans. Chaque mécanique ci-dessous a été inventée indépendamment par plusieurs civilisations — le lexique leur donne juste un carburant neuf.",
+    avEraSator: "Pompéi, avant 79 apr. J.-C. · la plus ancienne énigme de mots conservée",
+    avSatorTitle: "A · Le carré aux cinq mots",
+    avSatorDesc:
+      "Un palindrome latin de cinq par cinq gravé sur les murs de Pompéi, retrouvé de Rome à la Syrie : SATOR · AREPO · TENET · OPERA · ROTAS. Il se lit pareil en lignes et en colonnes, à l'endroit comme à l'envers — le mème préféré de l'Empire romain.",
+    avSatorRules:
+      "Explorer : touche une direction. Chaque direction lit cinq mots valides. Lignes et colonnes sont identiques — voilà la astuce, et personne ne sait pourquoi il fut créé.",
+    avRows: "→ Lignes",
+    avCols: "↓ Colonnes",
+    avRowsRev: "← Lignes inversées",
+    avColsRev: "↑ Colonnes inversées",
+    avSatorHist: "~2 000 ans · et toujours non résolu : « Arepo » n'apparaît nulle part ailleurs dans toute la littérature latine.",
+    avEraFusion: "Grèce ~300 av. J.-C. (anagrammes de Lycophron) · Chine Han ~200 apr. J.-C. (poèmes Lihe de Kong Rong)",
+    avFusionTitle: "B · Énigme de fusion · Lihe",
+    avFusionDesc:
+      "Le plus ancien jeu de construction de mots : briser un nom ou un mot en fragments et les refondre. Les poètes Han cachaient des noms dans des poèmes Lihe ; les poètes grecs écrivaient des anagrammes en vers de noms royaux. Les mots de l'IA sont des fusions de naissance — le jeu se reconstruit tout seul.",
+    avFusionRules:
+      "Jouer : le sens est donné. Clique les fragments qui se fondent en le mot forgé — mais certains fragments sont des leurres qui n'y appartiennent pas.",
+    avBuiltHint: "(clique les fragments ci-dessous)",
+    avSurrender: "Abandonner → révéler",
+    avNextRiddle: "Énigme suivante →",
+    avEraFlower: "Chine des Tang · Feihualing, le jeu de vin des lettrés",
+    avFlowerTitle: "C · Ordre floral · Feihualing",
+    avFlowerDesc:
+      "Aux banquets des Tang, le maître à boire fixait un caractère — disons hua, « fleur » — et chacun récitait à tour de rôle un vers le contenant ; qui hésitait buvait. Aujourd'hui le caractère vient du lexique, et les « vers » sont des mots forgés par l'IA.",
+    avFlowerRules:
+      "Jouer : un morphème obligatoire. En 45 secondes, clique chaque tuile qui le cache — la plupart ne le cachent pas. Chaque réussite révèle sa définition ; à la fin, les manquées sont cerclées.",
+    avMorphRequired: "Morphème obligatoire :",
+    avPickMorpheme: "Choisis ci-dessus un morphème pour lancer la manche.",
+    avClickEvery: "Clique chaque tuile qui cache le morphème.",
+    avWrongTile: (w: string) => `✗ ${w} — le morphème ne se cache pas dans celle-ci`,
+    avFoundTile: (w: string, def: string) => `✓ ${w} — ${def}`,
+    avPerfect: (s: number) => `Tout trouvé avec ${s}s d'avance — un ordre floral parfait ! 🏮`,
+    avTimeUp: (f: number, n: number) => `Temps écoulé ! Tu en as nommé ${f} / ${n}.`,
+    avMissed: (words: string) => `Manquées (cerclées de vert) : ${words}`,
+    avRestartRound: "Recommencer la manche",
+    avEraReverse: "Sumer ~1800 av. J.-C. · Sphinx · Livre d'Exeter ~1000 apr. J.-C.",
+    avReverseTitle: "D · Devinette inversée — à toi de forger le mot",
+    avReverseDesc:
+      "La devinette est le plus vieux jeu de mots de l'humanité : un sens décrit, une réponse à nommer. Cette fois, c'est toi l'auteur de la réponse. Avec une définition et ses morphèmes bruts, forge ton propre mot — puis regarde ce que l'IA a réellement forgé.",
+    avReverseRules:
+      "Jouer : lis la définition, puis forge ton mot — clique l'une des forges suggérées ci-dessous (l'une d'elles est le vrai choix de l'IA, mais nous ne dirons pas laquelle) ou tape ta propre fusion. Puis compare avec la machine.",
+    avCoinagePlaceholder: "Ta forge…",
+    avCompare: "Comparer avec l'IA",
+    avYouCoined: "Tu as forgé",
+    avAiCoined: "L'IA a forgé",
+    avEraChain: "Japon Shiritori · Corée Kkeutmareugi · Russie Goroda · Inde Antakshari",
+    avChainTitle: "E · Chaîne de mots · Jielong",
+    avChainDesc:
+      "Inventée indépendamment sur quatre continents : chaque mot doit se rattacher au précédent — par syllabe finale à Tokyo, dernière lettre à Séoul, nom de ville à Moscou, premier son d'une chanson à Delhi. La version du lexique relie par des tranches de lettres cachées à l'intérieur des mots.",
+    avChainRules:
+      "Jouer : choisis l'unique mot qui partage une tranche cachée d'au moins 5 lettres avec le mot courant. Trouve-la, la tranche s'allume, la chaîne grandit. Trois erreurs et la chaîne se rompt.",
+    avChainWin: "Chaîne complète — chaque maillon une tranche cachée d'au moins 5 lettres. 🔗",
+    avChainSnap: (run: string) => `Chaîne rompue. La séquence complète : ${run}`,
+    avChainAgain: "Encore une chaîne →",
+    avMorphemeNote:
+      "L'énigme de fusion, l'ordre floral et la devinette inversée exigent l'étymologie de chaque entrée (why_this_word). Ils s'allument pour une langue dès que ses entrées la portent.",
+    avFooter: "Données en direct · manches et familles de morphèmes calculées côté serveur · le carré Sator est de l'histoire, pas des données",
+  },
 };

@@ -74,3 +74,22 @@ summary {
   font-size: 1.25rem;
   line-height: 1.55;
 }
+
+/* Games: wrong-pick shake (prototype parity). */
+@keyframes game-shake {
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+.game-shake {
+  animation: game-shake 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-shake {
+    animation: none;
+  }
+}

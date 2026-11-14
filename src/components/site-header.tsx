@@ -7,7 +7,16 @@ import { LanguageSwitcher } from "./language-switcher";
 import { detectLocale, localePath, type Locale } from "@/lib/i18n/core";
 import { getDictionary } from "@/lib/i18n";
 
-type NavLabelKey = "navIndex" | "navPopularity" | "navContribute" | "navSeeds" | "navReview" | "navMyWords" | "navSources" | "navAbout";
+type NavLabelKey =
+  | "navIndex"
+  | "navPopularity"
+  | "navGames"
+  | "navContribute"
+  | "navSeeds"
+  | "navReview"
+  | "navMyWords"
+  | "navSources"
+  | "navAbout";
 
 // Links to pages that exist in every locale (href gets the locale prefix) vs.
 // pages still served in English only (action/owner tools — localized in later
@@ -15,6 +24,7 @@ type NavLabelKey = "navIndex" | "navPopularity" | "navContribute" | "navSeeds" |
 const NAV_ITEMS: { href: string; labelKey: NavLabelKey; localized: boolean }[] = [
   { href: "/index", labelKey: "navIndex", localized: true },
   { href: "/popularity", labelKey: "navPopularity", localized: true },
+  { href: "/games", labelKey: "navGames", localized: true },
   { href: "/contribute", labelKey: "navContribute", localized: false },
   { href: "/seeds", labelKey: "navSeeds", localized: false },
   { href: "/review", labelKey: "navReview", localized: false },
