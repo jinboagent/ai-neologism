@@ -19,6 +19,7 @@ Each feature file records:
 
 | Date | Feature | File |
 |---|---|---|
+| 2026-11-14 | Multilingual expansion (DE/EN/ES/FR) — phase 1: concept-family data foundation | [2026-11-14-multilingual-concept-family.md](./2026-11-14-multilingual-concept-family.md) |
 | 2026-11-08 | Coin-with-AI intent gate (hard quality gate on /api/coin/candidates) | [2026-11-08-coin-intent-gate.md](./2026-11-08-coin-intent-gate.md) |
 | 2026-11-08 | Contribution hub (API docs on /contribute) + Coin-with-AI on the homepage | [2026-11-08-contribution-hub-and-homepage-coin-ai.md](./2026-11-08-contribution-hub-and-homepage-coin-ai.md) |
 | 2026-11-08 | Public review-criteria page (/criteria) — visitor-facing statement of the approval bar | [2026-11-08-public-review-criteria-page.md](./2026-11-08-public-review-criteria-page.md) |

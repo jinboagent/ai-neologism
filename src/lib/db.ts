@@ -60,8 +60,16 @@ const SCHEMA_STATEMENTS: string[] = [
       use_votes INTEGER NOT NULL DEFAULT 0,
       work_votes INTEGER NOT NULL DEFAULT 0,
       published_at TEXT,
+      language TEXT NOT NULL DEFAULT 'en',
+      concept_id INTEGER,
+      grammar_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  `CREATE TABLE IF NOT EXISTS concepts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
   `CREATE TABLE IF NOT EXISTS revisions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,6 +153,39 @@ export async function ensureSchema(): Promise<void> {
       if (!names.includes("contact_email")) {
         await db.execute("ALTER TABLE words ADD COLUMN contact_email TEXT");
       }
+      // Multilingual phase 1 (2026-11-14): language/concept columns. ensureSchema
+      // self-migrates so every environment (fresh clone, prod boot) converges
+      // without a manual step; scripts/migrate-multilingual.mjs performs the same
+      // steps on demand with a printed verification report.
+      if (!names.includes("language")) {
+        await db.execute("ALTER TABLE words ADD COLUMN language TEXT NOT NULL DEFAULT 'en'");
+      }
+      if (!names.includes("concept_id")) {
+        await db.execute("ALTER TABLE words ADD COLUMN concept_id INTEGER");
+      }
+      if (!names.includes("grammar_json")) {
+        await db.execute("ALTER TABLE words ADD COLUMN grammar_json TEXT NOT NULL DEFAULT '{}'");
+      }
+      // Concept-family backfill: every pre-existing word becomes the anchor of its
+      // own concept (label = headword); per-language siblings join the same concept
+      // later. Only unlinked rows are processed, so this is a no-op after the first
+      // successful run. MAX(id) is safe because batch statements run sequentially.
+      const pending = await db.execute("SELECT id, word FROM words WHERE concept_id IS NULL ORDER BY id");
+      if (pending.rows.length > 0) {
+        const statements = pending.rows.flatMap((r) => [
+          { sql: "INSERT INTO concepts (label) VALUES (?)", args: [String(r.word)] },
+          { sql: "UPDATE words SET concept_id = (SELECT MAX(id) FROM concepts) WHERE id = ?", args: [Number(r.id)] },
+        ]);
+        for (let i = 0; i < statements.length; i += 100) {
+          await db.batch(statements.slice(i, i + 100), "write");
+        }
+      }
+      // Family uniqueness: one live entry per concept per language (rejected
+      // entries are exempt). Created only after the backfill above has had its
+      // chance to link every row.
+      await db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_words_concept_language_active ON words(concept_id, language) WHERE status IN ('published', 'in_review')"
+      );
     })().catch((e) => {
       globalThis.__neologismSchema = undefined; // allow a retry on the next call
       throw e;

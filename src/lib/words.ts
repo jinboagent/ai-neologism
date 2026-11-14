@@ -50,6 +50,9 @@ export type WordRow = {
   input_type: string | null;
   contributor_key_hash: string | null;
   contact_email: string | null;
+  language: string;
+  concept_id: number | null;
+  grammar_json: string;
   use_votes: number;
   work_votes: number;
   published_at: string | null;
@@ -57,12 +60,16 @@ export type WordRow = {
   updated_at: string;
 };
 
-export type Word = Omit<WordRow, "alternatives_json" | "verification_json" | "references_json" | "related_words" | "categories_json" | "ai_assisted"> & {
+/** Per-language grammar facts (multilingual phase 1). English entries leave it empty. */
+export type Grammar = { gender?: string; plural?: string; [key: string]: unknown };
+
+export type Word = Omit<WordRow, "alternatives_json" | "verification_json" | "references_json" | "related_words" | "categories_json" | "grammar_json" | "ai_assisted"> & {
   alternatives: Alternative[];
   verification: Verification;
   references: Reference[];
   related_words: string[];
   categories: string[];
+  grammar: Grammar;
   ai_assisted: boolean;
 };
 
@@ -84,6 +91,7 @@ export function hydrate(row: WordRow): Word {
     references_json,
     related_words: relatedWordsJson,
     categories_json,
+    grammar_json,
     ...rest
   } = row;
   return {
@@ -93,6 +101,7 @@ export function hydrate(row: WordRow): Word {
     references: parseJsonColumn<Reference[]>(references_json, []),
     related_words: parseJsonColumn<string[]>(relatedWordsJson, []),
     categories: parseJsonColumn<string[]>(categories_json, []),
+    grammar: parseJsonColumn<Grammar>(grammar_json, {}),
     ai_assisted: row.ai_assisted === 1,
   };
 }
@@ -179,6 +188,24 @@ export async function alphabetWithCounts(): Promise<{ letter: string; count: num
      WHERE status = 'published' GROUP BY letter ORDER BY letter`
   );
   return rows.filter((r) => /^[A-Z]$/.test(r.letter)).map((r) => ({ letter: r.letter, count: r.n }));
+}
+
+export type FamilyMember = { language: string; word: string; slug: string; pronunciation: string | null };
+
+/**
+ * The concept family (multilingual phase 1): published entries in every language
+ * describing the same phenomenon, ordered en → de → es → fr. A family may be
+ * partial — languages without an entry simply don't appear. Powers the entry-page
+ * language row and the hreflang alternates from phase 2 on.
+ */
+export async function getWordFamily(conceptId: number | null): Promise<FamilyMember[]> {
+  if (!conceptId) return [];
+  return qAll<FamilyMember>(
+    `SELECT language, word, slug, pronunciation FROM words
+     WHERE concept_id = ? AND status = 'published'
+     ORDER BY CASE language WHEN 'en' THEN 0 WHEN 'de' THEN 1 WHEN 'es' THEN 2 WHEN 'fr' THEN 3 ELSE 4 END`,
+    [conceptId]
+  );
 }
 
 export async function searchWords(q: string, limit = 30): Promise<Word[]> {

@@ -1,7 +1,7 @@
 import { ensureSchema, qAll, qGet, qRun } from "@/lib/db";
 import type { WordRow } from "@/lib/words";
 
-const TABLES = ["votes", "reviews", "revisions", "words", "keys"] as const;
+const TABLES = ["votes", "reviews", "revisions", "words", "keys", "concepts"] as const;
 
 /** Wipe every table so each test starts from an empty dictionary. */
 export async function resetDb(): Promise<void> {
@@ -34,6 +34,9 @@ export type WordSeed = Partial<{
   related_words: string;
   verification_json: string;
   ai_assisted: number;
+  language: string;
+  concept_id: number | null;
+  grammar_json: string;
 }>;
 
 /** Insert a word row directly, bypassing the submission pipeline. Returns the row id. */
@@ -43,8 +46,9 @@ export async function insertWord(seed: WordSeed = {}): Promise<number> {
   const info = await qRun(
     `INSERT INTO words (slug, word, definition, explanation, why_this_word, status, badge,
       contributor_key_hash, use_votes, work_votes, published_at, created_at, updated_at,
-      categories_json, alternatives_json, references_json, related_words, verification_json, ai_assisted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      categories_json, alternatives_json, references_json, related_words, verification_json, ai_assisted,
+      language, concept_id, grammar_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       seed.slug ?? word.toLowerCase(),
       word,
@@ -65,6 +69,9 @@ export async function insertWord(seed: WordSeed = {}): Promise<number> {
       seed.related_words ?? "[]",
       seed.verification_json ?? "{}",
       seed.ai_assisted ?? 0,
+      seed.language ?? "en",
+      seed.concept_id ?? null,
+      seed.grammar_json ?? "{}",
     ]
   );
   return info.lastInsertRowid;
@@ -98,7 +105,7 @@ export async function rawGet<T = Record<string, unknown>>(sql: string, args: unk
   return qGet<T>(sql, args as never);
 }
 
-export async function rawRun(sql: string): Promise<void> {
+export async function rawRun(sql: string, args: unknown[] = []): Promise<void> {
   await ensureSchema();
-  await qRun(sql);
+  await qRun(sql, args as never);
 }
