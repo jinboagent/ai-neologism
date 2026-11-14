@@ -20,7 +20,7 @@ import { fileURLToPath } from "url";
 const require = createRequire(new URL("../package.json", import.meta.url));
 const { createClient } = require("@libsql/client");
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WTR = path.join(ROOT, "wordstoreview");
 const dry = process.argv.includes("--dry");
 const db = createClient({ url: "file:" + path.join(ROOT, "data", "ai-neologism.db").replace(/\\/g, "/") });
@@ -28,10 +28,36 @@ const db = createClient({ url: "file:" + path.join(ROOT, "data", "ai-neologism.d
 const slugify = (s) =>
   s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 
+// Localized theme labels (2026-11-14): the four-language site shows themes, so
+// every theme carries de/es/fr label translations alongside the English one.
+const LOCAL_LABELS = {
+  "Politics, Power & Governance": { de: "Politik, Macht & Herrschaft", es: "Política, poder y gobernanza", fr: "Politique, pouvoir & gouvernance" },
+  "Geopolitics, Nations & Decline": { de: "Geopolitik, Nationen & Niedergang", es: "Geopolítica, naciones y declive", fr: "Géopolitique, nations & déclin" },
+  "Technology & AI Life": { de: "Technologie & KI-Leben", es: "Tecnología y vida con la IA", fr: "Technologie & vie avec l'IA" },
+  "Work, Careers & Office Life": { de: "Arbeit, Karriere & Büroalltag", es: "Trabajo, carreras y vida de oficina", fr: "Travail, carrières & vie de bureau" },
+  "Money, Markets & Consumption": { de: "Geld, Märkte & Konsum", es: "Dinero, mercados y consumo", fr: "Argent, marchés & consommation" },
+  "Health, Medicine & the Body": { de: "Gesundheit, Medizin & Körper", es: "Salud, medicina y cuerpo", fr: "Santé, médecine & corps" },
+  "Sports, Fitness & Play": { de: "Sport, Fitness & Spiel", es: "Deporte, fitness y juego", fr: "Sport, fitness & jeu" },
+  "Hobbies, Home & Domestic Life": { de: "Hobbys, Zuhause & Haushalt", es: "Aficiones, hogar y vida doméstica", fr: "Loisirs, maison & vie domestique" },
+  "Relationships & Social Life": { de: "Beziehungen & Sozialleben", es: "Relaciones y vida social", fr: "Relations & vie sociale" },
+  "Media, Language & Belief": { de: "Medien, Sprache & Glaube", es: "Medios, lengua y creencia", fr: "Médias, langue & croyance" },
+  "Family & kinship": { de: "Familie & Verwandtschaft", es: "Familia y parentesco", fr: "Famille & parenté" },
+  "Friendship & social circles": { de: "Freundschaft & Freundeskreise", es: "Amistad y círculos sociales", fr: "Amitié & cercles sociaux" },
+  "Work & career life": { de: "Arbeit & Karriereleben", es: "Trabajo y vida profesional", fr: "Travail & vie de carrière" },
+  "Home chores & domestic tech": { de: "Hausarbeit & Haustechnik", es: "Tareas del hogar y tecnología doméstica", fr: "Tâches ménagères & tech domestique" },
+  "Food, cooking & meals": { de: "Essen, Kochen & Mahlzeiten", es: "Comida, cocina y comidas", fr: "Nourriture, cuisine & repas" },
+  "Leisure, hobbies & play": { de: "Freizeit, Hobbys & Spiel", es: "Ocio, aficiones y juego", fr: "Loisirs, passe-temps & jeu" },
+  "Parenting & children": { de: "Erziehung & Kinder", es: "Crianza y niños", fr: "Parentalité & enfants" },
+  "Neighbors & community": { de: "Nachbarn & Nachbarschaft", es: "Vecinos y comunidad", fr: "Voisins & communauté" },
+  "Routines, habits & self-management": { de: "Routinen, Gewohnheiten & Selbstmanagement", es: "Rutinas, hábitos y autogestión", fr: "Routines, habitudes & gestion de soi" },
+  "Celebrations, travel & gatherings": { de: "Feste, Reisen & Zusammenkünfte", es: "Celebraciones, viajes y reuniones", fr: "Fêtes, voyages & rassemblements" },
+  "Dreams, sleep & the night": { de: "Träume, Schlaf & die Nacht", es: "Sueños, el dormir y la noche", fr: "Rêves, sommeil & la nuit" },
+};
+
 // 1. Discover every themed source file and its canonical label from the H1.
 const themedFiles = fs
   .readdirSync(WTR)
-  .filter((f) => /^batch-[34]-\d\d-.*-100\.md$/.test(f))
+  .filter((f) => /^batch-[345]-\d\d-.*-100\.md$/.test(f))
   .sort();
 const themes = new Map(); // slug -> { slug, label, batch, words: Set<string> }
 const fileToTheme = new Map(); // file -> slug
@@ -73,17 +99,25 @@ if (!info.rows.some((r) => String(r.name) === "theme_id")) {
 }
 await db.execute("CREATE INDEX IF NOT EXISTS idx_words_theme ON words(theme_id)");
 
-// 3. Seed / update themes by slug.
+// 3. Seed / update themes by slug (labels in all four languages).
 let themeInserted = 0, themeUpdated = 0;
 for (const t of [...themes.values()].sort((a, b) => a.slug.localeCompare(b.slug))) {
+  const loc = LOCAL_LABELS[t.label] ?? {};
   const existing = await db.execute("SELECT id FROM themes WHERE slug = ?", [t.slug]);
   if (existing.rows.length) {
     themeUpdated++;
-    if (!dry) await db.execute("UPDATE themes SET label_en = ? WHERE slug = ?", [t.label, t.slug]);
+    if (!dry)
+      await db.execute(
+        "UPDATE themes SET label_en = ?, label_de = ?, label_es = ?, label_fr = ? WHERE slug = ?",
+        [t.label, loc.de ?? null, loc.es ?? null, loc.fr ?? null, t.slug]
+      );
   } else {
     themeInserted++;
     if (!dry)
-      await db.execute("INSERT INTO themes (slug, label_en) VALUES (?, ?)", [t.slug, t.label]);
+      await db.execute(
+        "INSERT INTO themes (slug, label_en, label_de, label_es, label_fr) VALUES (?, ?, ?, ?, ?)",
+        [t.slug, t.label, loc.de ?? null, loc.es ?? null, loc.fr ?? null]
+      );
   }
 }
 
