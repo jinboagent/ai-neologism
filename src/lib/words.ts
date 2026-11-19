@@ -178,6 +178,48 @@ export async function countPublished(language?: string): Promise<number> {
   return row?.n ?? 0;
 }
 
+/** Published entries added in the last seven days — the homepage's "alive" stat. */
+export async function countPublishedThisWeek(language?: string): Promise<number> {
+  const filter = language ? "AND language = ?" : "";
+  const args = language ? [language] : [];
+  const row = await qGet<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM words WHERE status = 'published' AND published_at >= datetime('now', '-7 days') ${filter}`,
+    args
+  );
+  return row?.n ?? 0;
+}
+
+// Curated "editor's picks" per language edition — the homepage's fun face.
+// Kept in code (not a DB flag) so the selection is versioned and deployable;
+// upgrade path when the operator wants in-page control: a featured column +
+// an admin toggle. Locales without a list fall back to the trending table.
+export const FEATURED_SLUGS: Partial<Record<Locale, readonly string[]>> = {
+  en: [
+    "printertraitor",
+    "bossduck",
+    "bagserpent",
+    "batterypurgatory",
+    "sciencefridge",
+    "couchsummit",
+    "dreamperjury",
+    "synthstalgia",
+  ],
+};
+
+/** The curated entries, in curated order. Unpublished or renamed slugs drop
+ * out silently — a depublished word must never break the homepage wall. */
+export async function listFeatured(locale: Locale): Promise<Word[]> {
+  const slugs = FEATURED_SLUGS[locale];
+  if (!slugs || slugs.length === 0) return [];
+  const placeholders = slugs.map(() => "?").join(", ");
+  const rows = await qAll<WordRow>(
+    `SELECT * FROM words WHERE status = 'published' AND language = ? AND slug IN (${placeholders})`,
+    [locale, ...slugs]
+  );
+  const bySlug = new Map(rows.map((r) => [r.slug, hydrate(r)]));
+  return slugs.filter((s) => bySlug.has(s)).map((s) => bySlug.get(s)!);
+}
+
 /** Published entries whose novelty check produced a verdict (new or
  * near-existing) — the trust-strip number. Honest and unmisleading: it counts
  * what the search-verified badge actually attests. */

@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { CoinAi } from "@/components/coin-ai";
+import { FeaturedCards } from "@/components/featured-cards";
 import { SearchBox } from "@/components/search-box";
 import { WordTable } from "@/components/word-table";
 import { CATEGORIES } from "@/lib/categories";
-import { alphabetWithCounts, countPublished, countSearchVerified, popularity } from "@/lib/words";
+import {
+  alphabetWithCounts,
+  countPublished,
+  countPublishedThisWeek,
+  countSearchVerified,
+  listFeatured,
+  popularity,
+} from "@/lib/words";
 import { localePath, type Locale } from "@/lib/i18n/core";
 import { getDictionary } from "@/lib/i18n";
 
@@ -11,9 +19,11 @@ export async function HomePage({ locale }: { locale: Locale }) {
   const t = getDictionary(locale);
   const total = await countPublished(locale);
   const verified = await countSearchVerified(locale);
+  const weekly = await countPublishedThisWeek(locale);
   const letters = await alphabetWithCounts(locale);
-  const trending = await popularity("trending", 8, locale);
-  const show = trending.length > 0 ? trending : await popularity("verified", 8, locale);
+  const trending = await popularity("trending", 4, locale);
+  const show = trending.length > 0 ? trending : await popularity("verified", 4, locale);
+  const featured = await listFeatured(locale);
   // A brand-new language edition shows the localized empty states below; this
   // banner explains WHY the list is empty and points at the English original.
   const building = locale !== "en" && total === 0;
@@ -64,6 +74,7 @@ export async function HomePage({ locale }: { locale: Locale }) {
         <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap justify-center gap-x-10 gap-y-1 text-center text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{t.homeStatWords(total)}</span>
           <span>{t.homeStatEvidence(verified)}</span>
+          {weekly > 0 && <span className="text-good">{t.homeStatNewWeek(weekly)}</span>}
           <span className="font-medium text-primary">{t.homeStatReview}</span>
         </div>
       </section>
@@ -116,6 +127,19 @@ export async function HomePage({ locale }: { locale: Locale }) {
           ))}
         </div>
       </section>
+
+      {/* Editor's picks sits directly above the trending table: the card wall
+          carries the colour, the compact table carries the dictionary feel —
+          one content zone. Locales without curation skip the section. */}
+      {featured.length > 0 && (
+        <section className="mx-auto max-w-6xl px-4 pt-6">
+          <h2 className="text-lg font-bold">{t.homeFeaturedHeading}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t.homeFeaturedSub}</p>
+          <div className="mt-4">
+            <FeaturedCards words={featured} locale={locale} />
+          </div>
+        </section>
+      )}
 
       <section className="mx-auto max-w-6xl px-4 py-6">
         <div className="flex items-baseline justify-between">
