@@ -34,7 +34,12 @@ const BATCHES = [
   { key: 'batch-6-03', rev: 'review-batch-6-03-claude.md', src: 'batch-6-03-transport-100.md', theme: 'transport', reviewedAt: '2026-11-19' },
 ];
 
-const LANGS = ['de', 'nl', 'es'];
+const LANGS = ['de', 'fr', 'es'];
+
+// --fill: the EN (and de/es) rows were already imported; concepts exist. Parse the
+// given language tables only and insert the missing rows into the existing
+// batch-6 concept families (matched by EN headword → concept_id).
+const FILL_LANGS = process.argv.some((a) => a.startsWith('--fill')) ? ['fr'] : null;
 
 const VALID_CATEGORIES = new Set([
   'Society & Philanthropy', 'Technology & AI', 'Environment',
@@ -114,13 +119,24 @@ function slugify(word, locale = 'en') {
 
 async function main() {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const fillLangs = FILL_LANGS; // null = full import; ['fr'] = fill existing concepts
 
   const taken = new Set();          // existing words + slugs (any status), then everything added
   const publishedSlugs = new Set(); // pre-existing published slugs (related-link targets)
-  for (const r of (await db.execute('SELECT word, slug, status FROM words')).rows) {
+  const conceptIdByLabel = new Map(); // existing concepts (for --fill)
+  const langPresentByLabel = new Map(); // label -> Set(languages) already in DB
+  for (const r of (await db.execute('SELECT word, slug, status, concept_id, language, input_type FROM words')).rows) {
     taken.add(String(r.word).toLowerCase());
     taken.add(String(r.slug).toLowerCase());
     if (String(r.status) === 'published') publishedSlugs.add(String(r.slug));
+    if (fillLangs && String(r.input_type) === 'batch6ml') {
+      const cid = r.concept_id == null ? null : Number(r.concept_id);
+      if (cid != null) {
+        conceptIdByLabel.set(String(r.word).toLowerCase(), cid);
+        if (!langPresentByLabel.has(String(r.word).toLowerCase())) langPresentByLabel.set(String(r.word).toLowerCase(), new Set());
+        langPresentByLabel.get(String(r.word).toLowerCase()).add(String(r.language));
+      }
+    }
   }
 
   const problems = [];
@@ -150,9 +166,13 @@ async function main() {
       if (e.word.toLowerCase() !== v.word.toLowerCase()) {
         problems.push(`${b.key}#${n}: review word "${v.word}" != source "${e.word}"`); continue;
       }
-      if (taken.has(e.word.toLowerCase()) || taken.has(slugify(e.word))) { skippedDupes++; continue; }
+      if (fillLangs) {
+        if (!conceptIdByLabel.has(e.word.toLowerCase())) { problems.push(`${b.key}#${n}: no existing batch-6 concept for "${e.word}"`); continue; }
+      } else if (taken.has(e.word.toLowerCase()) || taken.has(slugify(e.word))) { skippedDupes++; continue; }
       const tr = {};
-      for (const l of LANGS) {
+      const langsWanted = fillLangs ?? LANGS;
+      for (const l of langsWanted) {
+        if (fillLangs && langPresentByLabel.get(e.word.toLowerCase()).has(l)) continue; // row already imported
         const t = langTables[l].get(n);
         if (!t) { problems.push(`${b.key}#${n}: missing ${l} row`); continue; }
         if (t.en.toLowerCase() !== e.word.toLowerCase()) {
@@ -178,18 +198,20 @@ async function main() {
       .map((x) => enSlugByWord.get(x.toLowerCase()) ?? slugify(x))
       .filter((sl) => publishedSlugs.has(sl) || survivors.some((t) => t.enSlug === sl)))];
 
-    words.push({
-      conceptLabel: e.word, lang: 'en', slug: s.enSlug, word: e.word,
-      pronunciation: e.pronunciation || null,
-      pos: e.pos || 'noun', definition: e.definition, explanation: e.explanation, why: e.why,
-      related, cats, funny: v.funny, novelty: v.novelty,
-      verification: {
-        verdict: 'APPROVE', reviewed_by: 'claude-cli novelty review', reviewed_at: b.reviewedAt,
-        funny_level: v.funny, novelty_level: v.novelty, batch: b.key,
-      },
-    });
+    if (!fillLangs) {
+      words.push({
+        conceptLabel: e.word, lang: 'en', slug: s.enSlug, word: e.word,
+        pronunciation: e.pronunciation || null,
+        pos: e.pos || 'noun', definition: e.definition, explanation: e.explanation, why: e.why,
+        related, cats, funny: v.funny, novelty: v.novelty,
+        verification: {
+          verdict: 'APPROVE', reviewed_by: 'claude-cli novelty review', reviewed_at: b.reviewedAt,
+          funny_level: v.funny, novelty_level: v.novelty, batch: b.key,
+        },
+      });
+    }
 
-    for (const l of LANGS) {
+    for (const l of (fillLangs ?? LANGS)) {
       const t = s.tr[l];
       if (!t) continue;
       const slug = allocateSlug(slugify(t.coin, l));
@@ -235,8 +257,10 @@ async function main() {
     return;
   }
 
-  // ---- Insert: concepts, then words (chunked batches) ------------------------
-  await db.batch(conceptLabels.map((label) => ({ sql: 'INSERT INTO concepts (label) VALUES (?)', args: [label] })), 'write');
+  // ---- Insert: concepts (full import only), then words (chunked batches) -----
+  if (!fillLangs) {
+    await db.batch(conceptLabels.map((label) => ({ sql: 'INSERT INTO concepts (label) VALUES (?)', args: [label] })), 'write');
+  }
   const conceptIds = new Map();
   for (const r of (await db.execute('SELECT id, label FROM concepts')).rows) conceptIds.set(String(r.label), Number(r.id));
 
