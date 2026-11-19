@@ -52,12 +52,15 @@ const LOCAL_LABELS = {
   "Routines, habits & self-management": { de: "Routinen, Gewohnheiten & Selbstmanagement", es: "Rutinas, hábitos y autogestión", fr: "Routines, habitudes & gestion de soi" },
   "Celebrations, travel & gatherings": { de: "Feste, Reisen & Zusammenkünfte", es: "Celebraciones, viajes y reuniones", fr: "Fêtes, voyages & rassemblements" },
   "Dreams, sleep & the night": { de: "Träume, Schlaf & die Nacht", es: "Sueños, el dormir y la noche", fr: "Rêves, sommeil & la nuit" },
+  "Weather, seasons & the sky": { de: "Wetter, Jahreszeiten & der Himmel", es: "El tiempo, las estaciones y el cielo", fr: "Météo, saisons & ciel" },
+  "Pets & animals in daily life": { de: "Haustiere & Tiere im Alltag", es: "Mascotas y animales en la vida diaria", fr: "Animaux domestiques & vie quotidienne" },
+  "Transport & commuting": { de: "Verkehr & Pendeln", es: "Transporte y desplazamiento diario", fr: "Transport & trajets quotidiens" },
 };
 
 // 1. Discover every themed source file and its canonical label from the H1.
 const themedFiles = fs
   .readdirSync(WTR)
-  .filter((f) => /^batch-[345]-\d\d-.*-100\.md$/.test(f))
+  .filter((f) => /^batch-[3456]-\d\d-.*-100\.md$/.test(f))
   .sort();
 const themes = new Map(); // slug -> { slug, label, batch, words: Set<string> }
 const fileToTheme = new Map(); // file -> slug
