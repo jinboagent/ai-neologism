@@ -240,13 +240,28 @@ export async function qRun(sql: string, args: InValue[] = []): Promise<{ lastIns
   return { lastInsertRowid: Number(res.lastInsertRowid) };
 }
 
-/** Atomic multi-statement work: fn receives a transactional client (execute only). */
+/** Atomic multi-statement work: fn receives a transactional client (execute only).
+ * The executor normalizes the Client's two-argument form — the raw Transaction
+ * object takes a single InStatement and silently DROPS a second (args)
+ * argument, which the previous `tx as unknown as {execute: Client["execute"]}`
+ * cast hid: on the local sqlite3 driver both forms bind, but over the remote
+ * Turso (Hrana) protocol every positional tx.execute(sql, args) ran with
+ * unbound parameters (SELECTs matched nothing, writes hit constraints), so
+ * votes, submissions and review actions all failed 2026-11-01 → 11-19. */
 export async function withTx<T>(fn: (tx: { execute: Client["execute"] }) => Promise<T>): Promise<T> {
   await ensureSchema();
   const db = getDb();
   const tx = await db.transaction("write");
+  const safeTx = {
+    execute: (stmtOrSql: Parameters<Client["execute"]>[0], args?: Parameters<Client["execute"]>[1]) => {
+      if (typeof stmtOrSql === "string") {
+        return tx.execute(args === undefined ? stmtOrSql : { sql: stmtOrSql, args });
+      }
+      return tx.execute(stmtOrSql);
+    },
+  };
   try {
-    const out = await fn(tx as unknown as { execute: Client["execute"] });
+    const out = await fn(safeTx as unknown as { execute: Client["execute"] });
     await tx.commit();
     return out;
   } catch (e) {
