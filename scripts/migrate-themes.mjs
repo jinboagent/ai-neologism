@@ -55,12 +55,17 @@ const LOCAL_LABELS = {
   "Weather, seasons & the sky": { de: "Wetter, Jahreszeiten & der Himmel", es: "El tiempo, las estaciones y el cielo", fr: "Météo, saisons & ciel" },
   "Pets & animals in daily life": { de: "Haustiere & Tiere im Alltag", es: "Mascotas y animales en la vida diaria", fr: "Animaux domestiques & vie quotidienne" },
   "Transport & commuting": { de: "Verkehr & Pendeln", es: "Transporte y desplazamiento diario", fr: "Transport & trajets quotidiens" },
+  "Screens, feeds & the algorithm": { de: "Bildschirme, Feeds & der Algorithmus", es: "Pantallas, feeds y el algoritmo", fr: "Écrans, fils & algorithme" },
+  "Money, shopping & the checkout": { de: "Geld, Einkaufen & die Kasse", es: "Dinero, compras y la caja", fr: "Argent, achats & caisse" },
+  "Health, illness & the waiting room": { de: "Gesundheit, Krankheit & das Wartezimmer", es: "Salud, enfermedad y la sala de espera", fr: "Santé, maladie & salle d'attente" },
+  "School, homework & the exam hall": { de: "Schule, Hausaufgaben & die Prüfungshalle", es: "Escuela, deberes y el salón de exámenes", fr: "École, devoirs & salle d'examen" },
+  "Music, singing & the earworm": { de: "Musik, Singen & der Ohrwurm", es: "Música, cantar y el worm del oído", fr: "Musique, chant & ver d'oreille" },
 };
 
 // 1. Discover every themed source file and its canonical label from the H1.
 const themedFiles = fs
   .readdirSync(WTR)
-  .filter((f) => /^batch-[3456]-\d\d-.*-100\.md$/.test(f))
+  .filter((f) => /^batch-[3-7]-\d\d-.*-100\.md$/.test(f))
   .sort();
 const themes = new Map(); // slug -> { slug, label, batch, words: Set<string> }
 const fileToTheme = new Map(); // file -> slug
