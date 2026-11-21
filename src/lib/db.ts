@@ -138,6 +138,16 @@ const SCHEMA_STATEMENTS: string[] = [
       VALUES (new.id, new.word, new.definition, new.explanation, new.why_this_word);
     END`,
   `CREATE INDEX IF NOT EXISTS idx_words_status ON words(status)`,
+  // Hot-path composite indexes (2026-11-21 Turso read-cost pass): the corpus
+  // grew from ~30 rows to ~5k across four languages and the listing/count/
+  // ranking queries were full-table scans — every scanned row is billed as a
+  // row read on Turso. These turn them into range scans; IF NOT EXISTS applies
+  // them on the next process start in every environment, no migration step.
+  `CREATE INDEX IF NOT EXISTS idx_words_lang_pub ON words(language, status, published_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_words_status_pub ON words(status, published_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_words_use_votes ON words(status, use_votes DESC, work_votes)`,
+  `CREATE INDEX IF NOT EXISTS idx_words_badge ON words(status, badge)`,
+  `CREATE INDEX IF NOT EXISTS idx_revisions_word ON revisions(word_id)`,
   `CREATE INDEX IF NOT EXISTS idx_votes_word ON votes(word_id)`,
   `CREATE INDEX IF NOT EXISTS idx_votes_created ON votes(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_seeds_key ON seeds(contributor_key_hash)`,
@@ -149,13 +159,41 @@ const SCHEMA_STATEMENTS: string[] = [
     )`,
 ];
 
+/** Retry a statement briefly on local-SQLite lock contention. Next's build
+ * workers share one file database and each runs the DDL below; the busy
+ * timeout makes them queue and this absorbs the residual races instead of
+ * failing the prerender. Remote Turso serializes server-side and never sees
+ * SQLITE_BUSY. */
+async function execDdl(db: Client, sql: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.execute(sql);
+      return;
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? "";
+      if (attempt < 4 && (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED")) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 /** Create the schema once per process. Safe to call concurrently and repeatedly. */
 export async function ensureSchema(): Promise<void> {
   if (!globalThis.__neologismSchema) {
     globalThis.__neologismSchema = (async () => {
       const db = getDb();
+      try {
+        // Queue on file locks instead of failing instantly (build workers race
+        // on the local file DB). Remote clients may reject pragmas — harmless.
+        await db.execute("PRAGMA busy_timeout = 8000");
+      } catch {
+        // ignore
+      }
       for (const sql of SCHEMA_STATEMENTS) {
-        await db.execute(sql);
+        await execDdl(db, sql);
       }
       // Column migration for databases created before a column existed.
       const info = await db.execute("PRAGMA table_info(words)");

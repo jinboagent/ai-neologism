@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { qAll, qGet, withTx } from "@/lib/db";
 import { canReview, resolveKeyHash } from "@/lib/keys";
-import { hydrate, toPublic, type WordRow } from "@/lib/words";
+import { bustPublicCache, hydrate, toPublic, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +94,9 @@ export async function POST(req: Request) {
   if (alreadyDecided) {
     return NextResponse.json({ error: "ALREADY_DECIDED", message: "This word was already reviewed." }, { status: 409 });
   }
+  // An approval publishes the word — drop the ISR + aggregate caches so it
+  // appears on the homepage/word page immediately.
+  if (action === "approve") await bustPublicCache();
 
   return NextResponse.json({
     slug,

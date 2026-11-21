@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { qGet, qRun, withTx } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
-import { deleteWordCascade } from "@/lib/words";
+import { bustPublicCache, deleteWordCascade } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   await withTx(async (tx) => {
     await deleteWordCascade(tx, row.id, row.slug);
   });
+  await bustPublicCache(); // the word just vanished from the public site
 
   return NextResponse.json({ deleted: row.id, slug: row.slug });
 }
@@ -53,6 +54,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "INVALID_TRANSITION", message: "Only published words can be unpublished." }, { status: 400 });
     }
     await qRun("UPDATE words SET status = 'draft', updated_at = datetime('now') WHERE id = ?", [row.id]);
+    await bustPublicCache(); // the word is now hidden — uncache it everywhere
     return NextResponse.json({ id: row.id, status: "draft" });
   }
   if (body.status === "published") {
@@ -63,6 +65,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       "UPDATE words SET status = 'published', published_at = COALESCE(published_at, datetime('now')), updated_at = datetime('now') WHERE id = ?",
       [row.id]
     );
+    await bustPublicCache(); // the word is public again
     return NextResponse.json({ id: row.id, status: "published" });
   }
   return NextResponse.json({ error: "INVALID_STATUS", message: "status must be 'draft' or 'published'." }, { status: 400 });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { qGet, withTx } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
 import { sendRejectionEmail } from "@/lib/mailer";
-import type { WordRow } from "@/lib/words";
+import { bustPublicCache, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -110,5 +110,6 @@ export async function POST(req: Request) {
     }
   }
 
+  if (approved > 0) await bustPublicCache(); // publishes change the public site
   return NextResponse.json({ action, approved, rejected, results });
 }

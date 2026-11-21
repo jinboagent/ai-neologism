@@ -11,7 +11,7 @@ import {
   sanitizeReferences,
   sanitizeSlugList,
 } from "@/lib/sanitize";
-import { countPublished, hydrate, LIMITS, listPublished, slugify, toPublic, type Reference } from "@/lib/words";
+import { bustPublicCache, countPublished, hydrate, LIMITS, listPublished, slugify, toPublic, type Reference } from "@/lib/words";
 import { isLocale } from "@/lib/i18n/core";
 import { isValidGender } from "@/lib/ai";
 
@@ -33,9 +33,14 @@ export async function GET(req: Request) {
 
   if (mine) {
     const keyHash = await resolveKeyHash(req);
-    if (!keyHash) return NextResponse.json({ error: "NO_KEY", words: [] }, { status: 401 });
+    if (!keyHash)
+      return NextResponse.json(
+        { error: "NO_KEY", words: [] },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      );
     const rows = await qAll<never>("SELECT * FROM words WHERE contributor_key_hash = ? ORDER BY updated_at DESC", [keyHash]);
-    return NextResponse.json({ words: rows.map(hydrate).map(toPublic) });
+    // Personal data — never cacheable, not even privately.
+    return NextResponse.json({ words: rows.map(hydrate).map(toPublic) }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
   const langRaw = url.searchParams.get("language") ?? "";
@@ -46,7 +51,12 @@ export async function GET(req: Request) {
   // `count` is the total number of published words (finding #9: it used to report
   // the current page's size); `page_size` is the number of items on this page.
   const total = await countPublished(langRaw || undefined);
-  return NextResponse.json({ words: words.map(toPublic), page, count: total, page_size: words.length });
+  // Public listing — identical for every caller, so the Vercel edge serves
+  // repeats for a minute instead of re-running the count against Turso.
+  return NextResponse.json(
+    { words: words.map(toPublic), page, count: total, page_size: words.length },
+    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+  );
 }
 
 type Submission = {

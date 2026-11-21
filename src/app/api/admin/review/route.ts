@@ -4,7 +4,7 @@ import { isAdmin } from "@/lib/admin";
 import { sendRejectionEmail } from "@/lib/mailer";
 import { CATEGORIES } from "@/lib/categories";
 import { sanitizeAlternatives, sanitizeCategories, sanitizeReferences, sanitizeSlugList } from "@/lib/sanitize";
-import { hydrate, LIMITS, parseJsonColumn, type WordRow } from "@/lib/words";
+import { bustPublicCache, hydrate, LIMITS, parseJsonColumn, type WordRow } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +143,9 @@ export async function POST(req: Request) {
   if (alreadyDecided) {
     return NextResponse.json({ error: "ALREADY_DECIDED", message: "This submission was already decided." }, { status: 409 });
   }
+  // A publish changes the public site (word page, homepage counts/trending,
+  // sitemap) — drop the ISR + aggregate caches so it appears immediately.
+  if (action === "approve") await bustPublicCache();
 
   // Notify the submitter on rejection (only if they provided an address and mail is configured).
   let email: { sent: boolean; detail: string } | null = null;

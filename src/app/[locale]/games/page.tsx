@@ -4,7 +4,8 @@ import { isLocale } from "@/lib/i18n/core";
 import { getDictionary } from "@/lib/i18n";
 import { localizedAlternates } from "@/lib/i18n/meta";
 
-export const dynamic = "force-dynamic";
+// ISR (1 h) — see src/app/games/page.tsx.
+export const revalidate = 3600;
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

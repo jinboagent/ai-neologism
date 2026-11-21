@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { GamePage, gameMetadata, isGameSlug } from "@/components/pages/game-page";
 import { isLocale } from "@/lib/i18n/core";
 
-export const dynamic = "force-dynamic";
+// ISR (1 h) — see src/app/games/[game]/page.tsx.
+export const revalidate = 3600;
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string; game: string }> }) {
   const { locale, game } = await params;

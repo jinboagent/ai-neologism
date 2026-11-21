@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { qGet, qRun, withTx } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
-import { deleteWordCascade } from "@/lib/words";
+import { bustPublicCache, deleteWordCascade } from "@/lib/words";
 
 export const dynamic = "force-dynamic";
 
@@ -77,5 +77,6 @@ export async function POST(req: Request) {
   }
 
   const succeeded = results.filter((r) => r.ok).length;
+  if (succeeded > 0) await bustPublicCache(); // deletes/unpublishes/republishes all change the public site
   return NextResponse.json({ action, succeeded, failed: results.length - succeeded, results });
 }

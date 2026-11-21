@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { GamePage, gameMetadata, isGameSlug } from "@/components/pages/game-page";
 
-export const dynamic = "force-dynamic";
+// ISR (1 h) — game content changes only when words publish.
+export const revalidate = 3600;
 
 export async function generateMetadata({ params }: { params: Promise<{ game: string }> }) {
   const { game } = await params;

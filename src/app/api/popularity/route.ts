@@ -14,5 +14,9 @@ export async function GET(req: Request) {
   if (langRaw && !isLocale(langRaw)) {
     return NextResponse.json({ error: "BAD_LANGUAGE", message: `Unknown language: ${langRaw}` }, { status: 400 });
   }
-  return NextResponse.json({ lens, words: (await popularity(lens, 10, langRaw || undefined)).map(toPublic) });
+  // Public ranking, identical for every caller — let the edge absorb repeats.
+  return NextResponse.json(
+    { lens, words: (await popularity(lens, 10, langRaw || undefined)).map(toPublic) },
+    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+  );
 }

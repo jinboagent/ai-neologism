@@ -4,7 +4,9 @@ import { isLocale, UI_LOCALES } from "@/lib/i18n/core";
 import { getDictionary } from "@/lib/i18n";
 import { localizedAlternates } from "@/lib/i18n/meta";
 
-export const dynamic = "force-dynamic";
+// ISR (5 min) — see the root page.tsx for the rationale. Localized siblings
+// share the same heavy aggregate queries.
+export const revalidate = 300;
 
 export function generateStaticParams() {
   return UI_LOCALES.map((locale) => ({ locale }));

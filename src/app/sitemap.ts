@@ -3,9 +3,11 @@ import { qAll } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
 import { LOCALES, localePath, type Locale } from "@/lib/i18n/core";
 
-// Regenerated on request rather than baked at build time, so words approved
-// through the admin queue appear here without a redeploy.
-export const dynamic = "force-dynamic";
+// ISR (1 h): regenerated at most hourly (and immediately on publish — the
+// review routes call revalidatePath("/", "layout")), so words approved through
+// the admin queue still appear without a redeploy, but Googlebot's repeated
+// fetches no longer scan the whole words table each time.
+export const revalidate = 3600;
 
 // SQLite's datetime('now') yields "YYYY-MM-DD HH:MM:SS" in UTC with no zone
 // marker; append one so Date parses it as UTC instead of the server's locale.

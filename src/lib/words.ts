@@ -123,6 +123,54 @@ export function toPublic(w: Word): PublicWord {
 // Field bounds live in ./limits — a client-safe module (see the note there).
 export { LIMITS } from "./limits";
 
+// --- Process-local aggregate cache (2026-11-21 Turso read-cost pass) --------
+// The homepage aggregates and the letter/popularity rankings scan the whole
+// published partition on every call. ISR + CDN caching keeps those calls rare
+// (once per revalidation window per serverless instance), but pagination and
+// letter-page traffic still repeats them within seconds. A short TTL turns
+// repeats into no-ops. Tests bypass the cache entirely (NODE_ENV=test) so
+// per-test mutations stay immediately visible; bustAggregateCache() runs
+// wherever published state or votes change (see bustPublicCache below).
+const AGG_TTL_MS = process.env.NODE_ENV === "test" ? 0 : 60_000;
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __wordAggCache: Map<string, { at: number; value: unknown }> | undefined;
+}
+const aggCache = (globalThis.__wordAggCache ??= new Map<string, { at: number; value: unknown }>());
+
+async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  if (AGG_TTL_MS === 0) return fn();
+  const hit = aggCache.get(key);
+  if (hit && Date.now() - hit.at < AGG_TTL_MS) return hit.value as T;
+  const value = await fn();
+  aggCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+/** Drop every cached aggregate — call after any write that changes published
+ * content or vote counts. */
+export function bustAggregateCache(): void {
+  aggCache.clear();
+}
+
+/**
+ * Invalidate everything the public site caches: the per-instance aggregate
+ * cache above and the ISR page cache (revalidatePath("/", "layout") marks every
+ * rendered page stale; pages re-render lazily on their next request). Safe
+ * outside a Next runtime (unit tests, scripts) — the dynamic import simply
+ * fails and is swallowed.
+ */
+export async function bustPublicCache(): Promise<void> {
+  bustAggregateCache();
+  try {
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/", "layout");
+  } catch {
+    // Not in a Next request runtime — nothing to invalidate.
+  }
+}
+
 export function slugify(word: string, locale: Locale = "en"): string {
   let s = word;
   // Per-language transliteration to ASCII slugs. German follows the Duden
@@ -173,20 +221,24 @@ export async function listPublished(opts: { limit?: number; offset?: number; lan
 }
 
 export async function countPublished(language?: string): Promise<number> {
-  const filter = language ? "AND language = ?" : "";
-  const row = await qGet<{ n: number }>(`SELECT COUNT(*) AS n FROM words WHERE status = 'published' ${filter}`, language ? [language] : []);
-  return row?.n ?? 0;
+  return cached(`countPublished:${language ?? "*"}`, async () => {
+    const filter = language ? "AND language = ?" : "";
+    const row = await qGet<{ n: number }>(`SELECT COUNT(*) AS n FROM words WHERE status = 'published' ${filter}`, language ? [language] : []);
+    return row?.n ?? 0;
+  });
 }
 
 /** Published entries added in the last seven days — the homepage's "alive" stat. */
 export async function countPublishedThisWeek(language?: string): Promise<number> {
-  const filter = language ? "AND language = ?" : "";
-  const args = language ? [language] : [];
-  const row = await qGet<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM words WHERE status = 'published' AND published_at >= datetime('now', '-7 days') ${filter}`,
-    args
-  );
-  return row?.n ?? 0;
+  return cached(`countPublishedThisWeek:${language ?? "*"}`, async () => {
+    const filter = language ? "AND language = ?" : "";
+    const args = language ? [language] : [];
+    const row = await qGet<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM words WHERE status = 'published' AND published_at >= datetime('now', '-7 days') ${filter}`,
+      args
+    );
+    return row?.n ?? 0;
+  });
 }
 
 // Curated "editor's picks" per language edition — the homepage's fun face.
@@ -224,12 +276,14 @@ export async function listFeatured(locale: Locale): Promise<Word[]> {
  * near-existing) — the trust-strip number. Honest and unmisleading: it counts
  * what the search-verified badge actually attests. */
 export async function countSearchVerified(language?: string): Promise<number> {
-  const filter = language ? "AND language = ?" : "";
-  const row = await qGet<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM words WHERE status = 'published' AND badge IN ('new', 'near_existing') ${filter}`,
-    language ? [language] : []
-  );
-  return row?.n ?? 0;
+  return cached(`countSearchVerified:${language ?? "*"}`, async () => {
+    const filter = language ? "AND language = ?" : "";
+    const row = await qGet<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM words WHERE status = 'published' AND badge IN ('new', 'near_existing') ${filter}`,
+      language ? [language] : []
+    );
+    return row?.n ?? 0;
+  });
 }
 
 /** Visibility: published words are public; drafts/queue items only to their owner or a reviewer. */
@@ -246,27 +300,31 @@ export async function getWord(slug: string, viewerKeyHash?: string | null, langu
 }
 
 export async function listByLetter(letter: string, language?: string): Promise<Word[]> {
-  // Escape LIKE metacharacters so a "%" or "_" in `letter` matches literally
-  // instead of acting as a wildcard.
-  const escaped = letter.replace(/[\\%_]/g, (m) => `\\${m}`);
-  const filter = language ? "AND language = ?" : "";
-  const rows = await qAll<WordRow>(
-    `SELECT * FROM words WHERE status = 'published' AND word LIKE ? ESCAPE '\\' ${filter}
-     ORDER BY word COLLATE NOCASE`,
-    language ? [`${escaped}%`, language] : [`${escaped}%`]
-  );
-  return rows.map(hydrate);
+  return cached(`letter:${letter}:${language ?? "*"}`, async () => {
+    // Escape LIKE metacharacters so a "%" or "_" in `letter` matches literally
+    // instead of acting as a wildcard.
+    const escaped = letter.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const filter = language ? "AND language = ?" : "";
+    const rows = await qAll<WordRow>(
+      `SELECT * FROM words WHERE status = 'published' AND word LIKE ? ESCAPE '\\' ${filter}
+       ORDER BY word COLLATE NOCASE`,
+      language ? [`${escaped}%`, language] : [`${escaped}%`]
+    );
+    return rows.map(hydrate);
+  });
 }
 
 export async function alphabetWithCounts(language?: string): Promise<{ letter: string; count: number }[]> {
-  const filter = language ? "AND language = ?" : "";
-  const rows = await qAll<{ letter: string; n: number }>(
-    `SELECT UPPER(SUBSTR(word, 1, 1)) AS letter, COUNT(*) AS n FROM words
-     WHERE status = 'published' ${filter} GROUP BY letter ORDER BY letter`,
-    language ? [language] : []
-  );
-  // German coinages may start with an umlaut — count those letters too.
-  return rows.filter((r) => /^[A-ZÄÖÜ]$/.test(r.letter)).map((r) => ({ letter: r.letter, count: r.n }));
+  return cached(`alphabet:${language ?? "*"}`, async () => {
+    const filter = language ? "AND language = ?" : "";
+    const rows = await qAll<{ letter: string; n: number }>(
+      `SELECT UPPER(SUBSTR(word, 1, 1)) AS letter, COUNT(*) AS n FROM words
+       WHERE status = 'published' ${filter} GROUP BY letter ORDER BY letter`,
+      language ? [language] : []
+    );
+    // German coinages may start with an umlaut — count those letters too.
+    return rows.filter((r) => /^[A-ZÄÖÜ]$/.test(r.letter)).map((r) => ({ letter: r.letter, count: r.n }));
+  });
 }
 
 export type FamilyMember = { language: string; word: string; slug: string; pronunciation: string | null };
@@ -305,37 +363,39 @@ export async function searchWords(q: string, limit = 30, language?: string): Pro
 export type PopularityLens = "trending" | "endorsed" | "contested" | "verified";
 
 export async function popularity(lens: PopularityLens, limit = 10, language?: string): Promise<Word[]> {
-  const langFilter = language ? " AND language = ?" : " ";
-  const wLangFilter = language ? " AND w.language = ?" : " ";
-  const langArgs = language ? [language] : [];
-  let sql: string;
-  switch (lens) {
-    case "endorsed":
-      sql = `SELECT * FROM words WHERE status='published'${langFilter} AND use_votes > 0
-             ORDER BY use_votes DESC, work_votes ASC LIMIT ?`;
-      break;
-    case "contested":
-      sql = `SELECT *, (use_votes * work_votes) AS heat FROM words
-             WHERE status='published'${langFilter} AND use_votes > 0 AND work_votes > 0
-             ORDER BY heat DESC LIMIT ?`;
-      break;
-    case "verified":
-      sql = `SELECT * FROM words WHERE status='published'${langFilter}
-             ORDER BY published_at DESC LIMIT ?`;
-      break;
-    case "trending":
-    default:
-      sql = `SELECT w.*, COALESCE(v.points, 0) AS points FROM words w
-             LEFT JOIN (
-               SELECT word_id, SUM(vote) AS points FROM votes
-               WHERE created_at > datetime('now', '-7 days') GROUP BY word_id
-             ) v ON v.word_id = w.id
-             WHERE w.status='published'${wLangFilter}
-             ORDER BY points DESC, w.published_at DESC LIMIT ?`;
-      break;
-  }
-  const rows = await qAll<WordRow>(sql, [...langArgs, limit]);
-  return rows.map(hydrate);
+  return cached(`popularity:${lens}:${limit}:${language ?? "*"}`, async () => {
+    const langFilter = language ? " AND language = ?" : " ";
+    const wLangFilter = language ? " AND w.language = ?" : " ";
+    const langArgs = language ? [language] : [];
+    let sql: string;
+    switch (lens) {
+      case "endorsed":
+        sql = `SELECT * FROM words WHERE status='published'${langFilter} AND use_votes > 0
+               ORDER BY use_votes DESC, work_votes ASC LIMIT ?`;
+        break;
+      case "contested":
+        sql = `SELECT *, (use_votes * work_votes) AS heat FROM words
+               WHERE status='published'${langFilter} AND use_votes > 0 AND work_votes > 0
+               ORDER BY heat DESC LIMIT ?`;
+        break;
+      case "verified":
+        sql = `SELECT * FROM words WHERE status='published'${langFilter}
+               ORDER BY published_at DESC LIMIT ?`;
+        break;
+      case "trending":
+      default:
+        sql = `SELECT w.*, COALESCE(v.points, 0) AS points FROM words w
+               LEFT JOIN (
+                 SELECT word_id, SUM(vote) AS points FROM votes
+                 WHERE created_at > datetime('now', '-7 days') GROUP BY word_id
+               ) v ON v.word_id = w.id
+               WHERE w.status='published'${wLangFilter}
+               ORDER BY points DESC, w.published_at DESC LIMIT ?`;
+        break;
+    }
+    const rows = await qAll<WordRow>(sql, [...langArgs, limit]);
+    return rows.map(hydrate);
+  });
 }
 
 export function recordVote(
@@ -380,6 +440,11 @@ export function recordVote(
       word.id,
     ]);
     return { ok: true, use_votes: counts.u, work_votes: counts.w };
+  }).then((r) => {
+    // Votes feed the trending/endorsed/contested lenses — drop the cached
+    // aggregates so the next ranking call sees the new counts.
+    if (r.ok) bustAggregateCache();
+    return r;
   });
 }
 
