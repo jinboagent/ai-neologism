@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/words/route";
-import { fetchWordRow, insertWord, rawGet, rawRun, resetDb } from "../helpers/db";
+import { fetchWordRow, insertReadKey, insertWord, READ_KEY, rawGet, rawRun, resetDb } from "../helpers/db";
 import { DDG_NO_RESULTS_HTML, mockFetch } from "../helpers/fetch";
 
 // Concept-family submission API (multilingual phase 3): language, concept_id,
@@ -8,6 +8,7 @@ import { DDG_NO_RESULTS_HTML, mockFetch } from "../helpers/fetch";
 
 beforeEach(async () => {
   await resetDb();
+  await insertReadKey();
   vi.unstubAllGlobals();
   mockFetch({ search: { html: DDG_NO_RESULTS_HTML }, dictionary: { status: 404 } });
 });
@@ -100,15 +101,17 @@ describe("GET /api/words · language filter", () => {
     await insertWord({ slug: "grauwaescherei", word: "Grauwäscherei", status: "published", language: "de" });
     await insertWord({ slug: "plainword", word: "plainword", status: "published" });
 
-    const de = await GET(new Request("http://localhost/api/words?language=de"));
+    const de = await GET(new Request("http://localhost/api/words?language=de", { headers: { "x-contribution-key": READ_KEY } }));
     const deData = (await de.json()) as { words: { language: string }[]; count: number };
     expect(deData.count).toBe(1);
     expect(deData.words[0].language).toBe("de");
 
-    const all = await GET(new Request("http://localhost/api/words"));
+    const all = await GET(new Request("http://localhost/api/words", { headers: { "x-contribution-key": READ_KEY } }));
     expect(((await all.json()) as { count: number }).count).toBe(2);
 
-    const bad = await GET(new Request("http://localhost/api/words?language=xx"));
+    // Language validation runs behind the gate — a bad language with a valid
+    // key is a 400, not a 401.
+    const bad = await GET(new Request("http://localhost/api/words?language=xx", { headers: { "x-contribution-key": READ_KEY } }));
     expect(bad.status).toBe(400);
   });
 });

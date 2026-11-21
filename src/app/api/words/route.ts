@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { qAll, qGet, withTx } from "@/lib/db";
-import { acceptedWordsCount, issueKey, KEY_COOKIE, resolveKeyHash, REVIEW_THRESHOLD } from "@/lib/keys";
+import { qAll, qGet, qRun, withTx } from "@/lib/db";
+import { acceptedWordsCount, issueKey, KEY_COOKIE, readGate, resolveKeyHash, REVIEW_THRESHOLD } from "@/lib/keys";
 import { rateLimit } from "@/lib/ratelimit";
 import { badgeFromVerdict, verifyNovelty } from "@/lib/verify";
 import { CATEGORIES } from "@/lib/categories";
@@ -31,14 +31,13 @@ export async function GET(req: Request) {
   const limit = Math.min(50, Math.max(1, intParam(url.searchParams.get("limit"), 20)));
   const mine = url.searchParams.get("mine") === "1";
 
+  // Reads are keyed too now (owner decision 2026-11-21): free key, per-key
+  // rate limit, fully traceable. The vote endpoints stay open for the site.
+  const gate = await readGate(req);
+  if (!gate.ok) return gate.response;
+
   if (mine) {
-    const keyHash = await resolveKeyHash(req);
-    if (!keyHash)
-      return NextResponse.json(
-        { error: "NO_KEY", words: [] },
-        { status: 401, headers: { "Cache-Control": "no-store" } }
-      );
-    const rows = await qAll<never>("SELECT * FROM words WHERE contributor_key_hash = ? ORDER BY updated_at DESC", [keyHash]);
+    const rows = await qAll<never>("SELECT * FROM words WHERE contributor_key_hash = ? ORDER BY updated_at DESC", [gate.keyHash]);
     // Personal data — never cacheable, not even privately.
     return NextResponse.json({ words: rows.map(hydrate).map(toPublic) }, { headers: { "Cache-Control": "private, no-store" } });
   }
@@ -51,11 +50,11 @@ export async function GET(req: Request) {
   // `count` is the total number of published words (finding #9: it used to report
   // the current page's size); `page_size` is the number of items on this page.
   const total = await countPublished(langRaw || undefined);
-  // Public listing — identical for every caller, so the Vercel edge serves
-  // repeats for a minute instead of re-running the count against Turso.
+  // Keyed response — never shared at the edge (Vercel's CDN does not vary on
+  // the key header, so public caching would hand data to keyless callers).
   return NextResponse.json(
     { words: words.map(toPublic), page, count: total, page_size: words.length },
-    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+    { headers: { "Cache-Control": "private, no-store" } }
   );
 }
 
@@ -182,6 +181,12 @@ export async function POST(req: Request) {
     const issued = await issueKey();
     keyHash = issued.keyHash;
     newKey = issued.key;
+  } else {
+    // A supplied key must exist as a row: register it on first use so its
+    // submissions accrue accepted_words and it passes the read gate. Before
+    // the keyed read API, a self-invented key silently never accumulated
+    // standing — its submissions worked but its review ladder never moved.
+    await qRun("INSERT OR IGNORE INTO keys (key_hash) VALUES (?)", [keyHash]);
   }
   if (!(await rateLimit(`submit:${keyHash}`, 10, 60 * 60 * 1000))) {
     return NextResponse.json({ error: "RATE_LIMITED", message: "Too many submissions this hour." }, { status: 429 });

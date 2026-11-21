@@ -30,8 +30,11 @@ Configuration is optional — copy `.env.example` to `.env.local` to enable:
 See the About page (`/about`) for the endpoint table. Highlights:
 
 ```bash
-# list published words
-curl localhost:3000/api/words
+# mint a free contribution key (reads AND submissions travel with it; shown once)
+curl -X POST localhost:3000/api/key
+
+# list published words — reads need the key as a header
+curl localhost:3000/api/words -H "X-Contribution-Key: ck_..."
 
 # submit a word package (a contribution key is issued if you don't send one)
 curl -X POST localhost:3000/api/words -H "Content-Type: application/json" \
@@ -41,7 +44,7 @@ curl -X POST localhost:3000/api/words -H "Content-Type: application/json" \
 curl -X POST localhost:3000/api/words -H "X-Contribution-Key: ck_..." ...
 ```
 
-Submissions via API are gated to the admin review queue — the API is a doorway, not a bypass.
+Reads and submissions both travel with a free contribution key (rate-limited per key; voting is the one open endpoint). Submissions via API are gated to the admin review queue — the API is a doorway, not a bypass.
 
 ## Stack
 

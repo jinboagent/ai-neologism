@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { GET, PUT } from "@/app/api/words/[slug]/route";
 import { getDb } from "@/lib/db";
 import { hashKey } from "@/lib/keys";
-import { fetchWordRow, insertKey, insertWord, rawGet, rawRun, resetDb } from "../helpers/db";
+import { fetchWordRow, insertKey, insertReadKey, insertWord, READ_KEY, rawGet, rawRun, resetDb } from "../helpers/db";
 
 beforeEach(async () => {
   await resetDb();
+  await insertReadKey();
 });
 
 let seq = 0;
@@ -31,8 +32,10 @@ function put(slug: string, body: unknown, key?: string): Request {
 }
 
 function get(slug: string, key?: string): Request {
+  // Reads are keyed (owner decision 2026-11-21) — an explicit key overrides the
+  // shared READ_KEY so owner-visibility tests keep working unchanged.
   return new Request(`http://localhost/api/words/${slug}`, {
-    headers: key ? { "X-Contribution-Key": key } : {},
+    headers: { "X-Contribution-Key": key ?? READ_KEY },
   });
 }
 
@@ -42,6 +45,8 @@ describe("GET /api/words/[slug]", () => {
   beforeEach(async () => {
     await insertWord({ slug: "pub", word: "pub", status: "published" });
     await insertWord({ slug: "queue", word: "queue", status: "in_review", contributor_key_hash: hashKey("ck_owner") });
+    // Reads are keyed now — the contributor's key must be a real issued key.
+    await insertKey(hashKey("ck_owner"));
   });
 
   it("returns a published word to an anonymous caller", async () => {

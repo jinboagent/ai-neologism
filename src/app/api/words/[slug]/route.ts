@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { qGet, qRun } from "@/lib/db";
-import { canReview, resolveKeyHash } from "@/lib/keys";
+import { canReview, readGate, resolveKeyHash } from "@/lib/keys";
 import { rateLimit } from "@/lib/ratelimit";
 import { CATEGORIES } from "@/lib/categories";
 import { sanitizeAlternatives, sanitizeCategories, sanitizeReferences, sanitizeSlugList } from "@/lib/sanitize";
@@ -10,10 +10,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const keyHash = await resolveKeyHash(req);
-  const word = await getWord(slug, keyHash);
+  const gate = await readGate(req);
+  if (!gate.ok) return gate.response;
+  const word = await getWord(slug, gate.keyHash);
   if (!word) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  return NextResponse.json({ word: toPublic(word) });
+  // Keyed response — never shared at the edge (see keys.ts readGate).
+  return NextResponse.json({ word: toPublic(word) }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ slug: string }> }) {

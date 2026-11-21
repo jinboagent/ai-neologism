@@ -3,11 +3,12 @@ import { GET, POST } from "@/app/api/words/route";
 import { getDb } from "@/lib/db";
 import { hashKey } from "@/lib/keys";
 import { CATEGORIES } from "@/lib/categories";
-import { fetchWordRow, insertKey, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
+import { fetchWordRow, insertKey, insertReadKey, insertWord, READ_KEY, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 import { DDG_NO_RESULTS_HTML, ddgHtml, dictionaryPayload, mockFetch } from "../helpers/fetch";
 
 beforeEach(async () => {
   await resetDb();
+  await insertReadKey();
   vi.unstubAllGlobals();
   // Hermetic default: every POST re-runs novelty verification server-side, so
   // tests without a specific plan would otherwise hit the real network — slow
@@ -27,7 +28,17 @@ function post(body: unknown, headers: Record<string, string> = {}): Request {
 }
 
 function get(query = "", headers: Record<string, string> = {}): Request {
-  return new Request(`http://localhost/api/words${query}`, { headers });
+  // The read API is keyed — READ_KEY rides along unless a test overrides it
+  // (to exercise the gate itself). Merge case-insensitively: object spread
+  // treats the two header spellings as different keys, and Headers would
+  // comma-join the duplicates into one invalid credential.
+  const key = headers["x-contribution-key"] ?? headers["X-Contribution-Key"] ?? READ_KEY;
+  const rest = Object.fromEntries(
+    Object.entries(headers).filter(([h]) => h.toLowerCase() !== "x-contribution-key")
+  );
+  return new Request(`http://localhost/api/words${query}`, {
+    headers: { ...rest, "x-contribution-key": key },
+  });
 }
 
 const valid = (word = "zephquake", definition = "A sudden tremor of public confidence after a disclosure.") => ({
@@ -338,9 +349,25 @@ describe("GET /api/words", () => {
   });
 
   it("requires a key for mine=1", async () => {
-    const res = await GET(get("?mine=1"));
+    const res = await GET(get("?mine=1", { "x-contribution-key": "" }));
     expect(res.status).toBe(401);
-    expect((await res.json()).error).toBe("NO_KEY");
+    expect((await res.json()).error).toBe("KEY_REQUIRED");
+  });
+
+  it("rejects a keyless GET with KEY_REQUIRED and onboarding instructions", async () => {
+    const res = await GET(get("", { "x-contribution-key": "" }));
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("KEY_REQUIRED");
+    expect(body.message).toContain("/api/key");
+    // Keyed data must never be edge-cacheable.
+    expect(res.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("rejects an invented key that was never issued", async () => {
+    const res = await GET(get("", { "x-contribution-key": "ck_bogus_000000000000000000000000" }));
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe("KEY_REQUIRED");
   });
 
   it("returns only the caller's own submissions for mine=1", async () => {

@@ -1,4 +1,5 @@
 import { ensureSchema, qAll, qGet, qRun } from "@/lib/db";
+import { hashKey } from "@/lib/keys";
 import type { WordRow } from "@/lib/words";
 
 const TABLES = ["votes", "reviews", "revisions", "words", "keys", "concepts", "rate_limits"] as const;
@@ -12,6 +13,14 @@ export async function resetDb(): Promise<void> {
   // Reset AUTOINCREMENT counters when the bookkeeping table exists, so ids are predictable.
   const hasSequence = await qGet("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'");
   if (hasSequence) await qRun("DELETE FROM sqlite_sequence");
+}
+
+/** Shared READ key for GET tests: the public read API requires a real issued
+ * key (owner decision 2026-11-21), so request builders send this one and
+ * beforeEach calls insertReadKey() to register its hash. */
+export const READ_KEY = "ck_test_read_0000000000000000000000000000";
+export async function insertReadKey(): Promise<void> {
+  await insertKey(hashKey(READ_KEY));
 }
 
 export type WordSeed = Partial<{

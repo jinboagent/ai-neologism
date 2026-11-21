@@ -143,14 +143,15 @@ function ApiDocs() {
         </thead>
         <tbody>
           {[
-            ["GET /api/words", "list published words (page, limit)"],
+            ["POST /api/key", "mint a free contribution key (returned once; also set as a browser cookie). Required for reads, sent as the X-Contribution-Key header"],
+            ["GET /api/words", "list published words (page, limit) — free key required"],
             ["POST /api/words", "submit a word package (X-Contribution-Key header; returns 202 in_review; a new key is issued if absent). API submissions are reviewed by the admin alone — add an optional contact_email to be notified of the decision"],
-            ["GET /api/words/{slug}", "one full structured entry"],
+            ["GET /api/words/{slug}", "one full structured entry — free key required"],
             ["PUT /api/words/{slug}", "edit (owner or reviewer); returned words re-enter the queue"],
-            ["GET /api/words/{slug}/revisions", "revision history"],
-            ["GET /api/search?q=", "full-text search"],
-            ["GET /api/popularity?lens=trending|endorsed|contested|verified", "popularity lenses"],
-            ["POST /api/words/{slug}/vote", "vote {vote: 1 | -1} (rate-limited)"],
+            ["GET /api/words/{slug}/revisions", "revision history — free key required"],
+            ["GET /api/search?q=", "full-text search — free key required"],
+            ["GET /api/popularity?lens=trending|endorsed|contested|verified", "popularity lenses — free key required"],
+            ["POST /api/words/{slug}/vote", "vote {vote: 1 | -1} (rate-limited; open — no key needed)"],
             ["POST /api/coin/candidates", "{text | url} → AI candidate words"],
             ["POST /api/coin/verify", "{word, definition} → novelty verdict + evidence"],
             ["GET /api/key", "your key status (accepted words, review rights)"],

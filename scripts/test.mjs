@@ -28,6 +28,19 @@ const ADMIN_USER = process.env.TEST_ADMIN_USER ?? envLocal.ADMIN_USERNAME ?? "ad
 const ADMIN_PASS = process.env.TEST_ADMIN_PASS ?? envLocal.ADMIN_PASSWORD ?? "change-me-local";
 const CRON_SECRET = process.env.CRON_SECRET ?? envLocal.CRON_SECRET ?? "";
 const TS = Date.now().toString(36);
+// Reads use a dedicated, freshly minted key with zero accepted words — never
+// the reviewer key, whose review rights would change visibility semantics
+// (a reviewer may see unpublished words, breaking 404 assertions).
+let readKey = null;
+const READ_HEADERS = () => ({ "X-Contribution-Key": readKey });
+async function ensureReadKey() {
+  if (readKey) return;
+  // The keymint limit is per IP+UA fingerprint; the unique UA keeps this mint
+  // out of any shared bucket.
+  const res = await req("POST", "/api/key", { useJar: false, headers: { "User-Agent": `E2E-ReadKey-${TS}` } });
+  if (res.status !== 201 || !res.json?.key) throw new Error(`could not mint the suite read key (status ${res.status})`);
+  readKey = res.json.key;
+}
 
 // ---------------------------------------------------------------------------
 // harness
@@ -73,7 +86,10 @@ async function req(method, path, { body, headers = {}, useJar = true, timeoutMs 
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
-  storeCookies(res);
+  // useJar:false means "act anonymous" — its Set-Cookie must not leak into the
+  // jar, or a later jar-sending request would silently carry that identity
+  // (this exact leak is why the web-submission test stopped seeing a fresh key).
+  if (useJar) storeCookies(res);
   const text = await res.text();
   let json = null;
   try {
@@ -143,43 +159,50 @@ async function testPublicReads() {
     ok(`GET ${p} → 200`, status === 200, `got ${status}`);
   }
 
-  const list = await req("GET", "/api/words", { useJar: false });
+  const list = await req("GET", "/api/words", { useJar: false, headers: READ_HEADERS() });
   ok("GET /api/words → 200", list.status === 200);
   ok("published list non-empty", (list.json?.words?.length ?? 0) > 0);
   assertNoPrivateFields("GET /api/words", list.text);
 
-  const word = await req("GET", "/api/words/graywashing", { useJar: false });
+  const word = await req("GET", "/api/words/graywashing", { useJar: false, headers: READ_HEADERS() });
   ok("GET /api/words/graywashing → 200", word.status === 200);
   ok("word has definition", !!word.json?.word?.definition);
   assertNoPrivateFields("GET /api/words/{slug}", word.text);
 
-  const missing = await req("GET", "/api/words/zz-nonexistent-word", { useJar: false });
+  const missing = await req("GET", "/api/words/zz-nonexistent-word", { useJar: false, headers: READ_HEADERS() });
   ok("GET unknown word → 404", missing.status === 404);
 
-  const search = await req("GET", "/api/search?q=philanthropy", { useJar: false });
+  const search = await req("GET", "/api/search?q=philanthropy", { useJar: false, headers: READ_HEADERS() });
   ok("full-text search finds graywashing", (search.json?.words ?? []).some((w) => w.slug === "graywashing"));
 
-  const badFts = await req("GET", "/api/search?q=%22%27%29%3B DROP TABLE words%3B--", { useJar: false });
+  const badFts = await req("GET", "/api/search?q=%22%27%29%3B DROP TABLE words%3B--", { useJar: false, headers: READ_HEADERS() });
   ok("FTS injection-ish query handled safely", badFts.status === 200 && Array.isArray(badFts.json?.words));
 
   for (const lens of ["trending", "endorsed", "contested", "verified"]) {
-    const pop = await req("GET", `/api/popularity?lens=${lens}`, { useJar: false });
+    const pop = await req("GET", `/api/popularity?lens=${lens}`, { useJar: false, headers: READ_HEADERS() });
     ok(`popularity lens ${lens} → 200`, pop.status === 200 && Array.isArray(pop.json?.words));
   }
-  const bogus = await req("GET", "/api/popularity?lens=bogus", { useJar: false });
+  const bogus = await req("GET", "/api/popularity?lens=bogus", { useJar: false, headers: READ_HEADERS() });
   ok("bogus lens falls back to trending", bogus.json?.lens === "trending");
 
-  const revs = await req("GET", "/api/words/graywashing/revisions", { useJar: false });
+  const revs = await req("GET", "/api/words/graywashing/revisions", { useJar: false, headers: READ_HEADERS() });
   ok("revisions endpoint → 200", revs.status === 200 && Array.isArray(revs.json?.revisions));
   assertNoPrivateFields("revisions", revs.text);
 
-  const badLimit = await req("GET", "/api/words?limit=abc&page=xyz", { useJar: false });
+  const badLimit = await req("GET", "/api/words?limit=abc&page=xyz", { useJar: false, headers: READ_HEADERS() });
   ok("non-numeric pagination tolerated (NaN fix)", badLimit.status === 200);
+
+  // The read gate itself (owner decision 2026-11-21): keyless and forged keys
+  // are both 401, with onboarding instructions in the body.
+  const keyless = await req("GET", "/api/words", { useJar: false });
+  ok("GET /api/words without key → 401", keyless.status === 401 && keyless.json?.error === "KEY_REQUIRED");
+  const forged = await req("GET", "/api/words", { useJar: false, headers: { "X-Contribution-Key": "ck_forged_" + TS } });
+  ok("GET /api/words with invented key → 401", forged.status === 401 && forged.json?.error === "KEY_REQUIRED");
 }
 
 async function testVoting() {
   section("B. Voting");
-  const before = (await req("GET", "/api/words/graywashing", { useJar: false })).json.word;
+  const before = (await req("GET", "/api/words/graywashing", { useJar: false, headers: READ_HEADERS() })).json.word;
   const v1 = await req("POST", "/api/words/graywashing/vote", { body: { vote: 1 }, useJar: false });
   ok("use-vote accepted", v1.status === 200 && v1.json?.ok === true);
   ok("use count increased", v1.json.use_votes === before.use_votes + 1, `${before.use_votes} -> ${v1.json?.use_votes}`);
@@ -331,7 +354,7 @@ async function testCommunityReview({ webSlug, webKey }) {
   });
   ok("reviewer approval → published", approve.status === 200 && approve.json?.status === "published");
 
-  const published = await req("GET", `/api/words/${webSlug}`, { useJar: false });
+  const published = await req("GET", `/api/words/${webSlug}`, { useJar: false, headers: READ_HEADERS() });
   ok("published word now publicly visible", published.status === 200 && published.json?.word?.status === "published");
   assertNoPrivateFields("published word", published.text);
 }
@@ -423,14 +446,14 @@ async function testApiChannelAndAdmin() {
   ok("admin approve-with-edits → published", approveEdits.status === 200 && approveEdits.json?.status === "published" && approveEdits.json?.edits_applied === true);
   ok("approve notification marked not-applicable", /not applicable/i.test(approveEdits.json?.notified?.detail ?? ""));
 
-  const edited = await req("GET", `/api/words/zztest${TS}api1`, { useJar: false });
+  const edited = await req("GET", `/api/words/zztest${TS}api1`, { useJar: false, headers: READ_HEADERS() });
   ok("published API word carries the admin's edit", edited.json?.word?.definition?.includes("admin edited"));
 
   const declinedOwner = await req("GET", `/api/words/zztest${TS}api2`, { headers: { "X-Contribution-Key": `ck_zztest_apikey2_${TS}` }, useJar: false });
   ok("rejected word visible to its submitter with reason", declinedOwner.json?.word?.status === "declined" && !!declinedOwner.json?.word?.return_notes);
   assertNoPrivateFields("declined word (owner view)", declinedOwner.text);
 
-  const stranger = await req("GET", `/api/words/zztest${TS}api2`, { useJar: false });
+  const stranger = await req("GET", `/api/words/zztest${TS}api2`, { useJar: false, headers: READ_HEADERS() });
   ok("rejected word invisible to strangers → 404", stranger.status === 404);
 
   const logout = await req("DELETE", "/api/admin/login");
@@ -499,6 +522,7 @@ async function testCron() {
 console.log(`AI Neologism end-to-end suite — ${BASE}\n`);
 
 const ctx = {};
+await ensureReadKey();
 await testPublicReads();
 await testVoting();
 Object.assign(ctx, (await testSubmission()) ?? {});
@@ -534,17 +558,17 @@ async function testAdminWordManagement() {
 
   const unpub = await req("PATCH", `/api/admin/words/${entry.id}`, { body: { status: "draft" } });
   ok("unpublish → draft", unpub.status === 200 && unpub.json?.status === "draft");
-  const hidden = await req("GET", `/api/words/${slug}`, { useJar: false });
+  const hidden = await req("GET", `/api/words/${slug}`, { useJar: false, headers: READ_HEADERS() });
   ok("unpublished word hidden from the public → 404", hidden.status === 404);
 
   const repub = await req("PATCH", `/api/admin/words/${entry.id}`, { body: { status: "published" } });
   ok("republish → published", repub.status === 200 && repub.json?.status === "published");
-  const visible = await req("GET", `/api/words/${slug}`, { useJar: false });
+  const visible = await req("GET", `/api/words/${slug}`, { useJar: false, headers: READ_HEADERS() });
   ok("republished word visible again", visible.status === 200);
 
   const del = await req("DELETE", `/api/admin/words/${entry.id}`);
   ok("delete → removed", del.status === 200 && del.json?.slug === slug);
-  const gone = await req("GET", `/api/words/${slug}`, { useJar: false });
+  const gone = await req("GET", `/api/words/${slug}`, { useJar: false, headers: READ_HEADERS() });
   ok("deleted word gone → 404", gone.status === 404);
   const list2 = await req("GET", "/api/admin/words");
   ok("manage list no longer contains it", !(list2.json?.words ?? []).some((w) => w.slug === slug));
@@ -589,8 +613,8 @@ async function testAdminBatch() {
     appr.status === 200 && appr.json?.approved === 2,
     `got ${appr.status} ${JSON.stringify(appr.json ?? {}).slice(0, 120)}`
   );
-  const pub1 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false });
-  const pub2 = await req("GET", `/api/words/${slugs[1]}`, { useJar: false });
+  const pub1 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false, headers: READ_HEADERS() });
+  const pub2 = await req("GET", `/api/words/${slugs[1]}`, { useJar: false, headers: READ_HEADERS() });
   ok("approved words are publicly visible", pub1.status === 200 && pub2.status === 200);
 
   const mixed = await req("POST", "/api/admin/review/batch", {
@@ -616,7 +640,7 @@ async function testAdminBatch() {
     .filter(Boolean);
   const unpub = await req("POST", "/api/admin/words/batch", { body: { ids, action: "unpublish" } });
   ok("batch unpublish takes both down", unpub.status === 200 && unpub.json?.succeeded === 2, `got ${unpub.status}`);
-  const gone1 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false });
+  const gone1 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false, headers: READ_HEADERS() });
   ok("batch-unpublished word hidden from the public → 404", gone1.status === 404);
   const repub = await req("POST", "/api/admin/words/batch", { body: { ids, action: "republish" } });
   ok("batch republish brings both back", repub.status === 200 && repub.json?.succeeded === 2);
@@ -625,8 +649,8 @@ async function testAdminBatch() {
     "batch delete reports missing ids",
     mixedManage.status === 200 && mixedManage.json?.succeeded === 2 && mixedManage.json?.failed === 1
   );
-  const gone2 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false });
-  const gone3 = await req("GET", `/api/words/${slugs[1]}`, { useJar: false });
+  const gone2 = await req("GET", `/api/words/${slugs[0]}`, { useJar: false, headers: READ_HEADERS() });
+  const gone3 = await req("GET", `/api/words/${slugs[1]}`, { useJar: false, headers: READ_HEADERS() });
   ok("batch-deleted words gone → 404", gone2.status === 404 && gone3.status === 404);
   const list2 = await req("GET", "/api/admin/words");
   ok(

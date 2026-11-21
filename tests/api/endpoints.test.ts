@@ -6,11 +6,12 @@ import * as verifyRoute from "@/app/api/coin/verify/route";
 import * as candidatesRoute from "@/app/api/coin/candidates/route";
 import { getDb } from "@/lib/db";
 import { hashKey } from "@/lib/keys";
-import { insertKey, insertWord, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
+import { insertKey, insertReadKey, insertWord, READ_KEY, resetDb, rawAll, rawGet, rawRun } from "../helpers/db";
 import { DDG_NO_RESULTS_HTML, ddgHtml, dictionaryPayload, mockFetch } from "../helpers/fetch";
 
 beforeEach(async () => {
   await resetDb();
+  await insertReadKey();
   vi.unstubAllGlobals();
   // The rotating XFF in headers() only shapes the fingerprint when a proxy is
   // trusted — without it every caller shares the "local" identity and the
@@ -34,16 +35,28 @@ const headers = (extra: Record<string, string> = {}) => ({
 });
 
 function jsonRequest(url: string, body?: unknown, hdrs: Record<string, string> = {}) {
+  // GETs are gated on a real issued key (owner decision 2026-11-21) — READ_KEY
+  // rides along unless the test overrides it. Merge case-insensitively: object
+  // spread treats the two header spellings as different keys, and Headers
+  // would comma-join the duplicates into one invalid credential.
+  const key = hdrs["x-contribution-key"] ?? hdrs["X-Contribution-Key"] ?? READ_KEY;
+  const rest = Object.fromEntries(
+    Object.entries(hdrs).filter(([h]) => h.toLowerCase() !== "x-contribution-key")
+  );
   return new Request(url, {
     method: body === undefined ? "GET" : "POST",
-    headers: body === undefined ? hdrs : { "Content-Type": "application/json", ...hdrs },
+    headers:
+      body === undefined
+        ? { ...rest, "x-contribution-key": key }
+        : { "Content-Type": "application/json", ...hdrs },
     body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
 describe("GET /api/key", () => {
   it("reports no key for an anonymous caller", async () => {
-    const res = await keyRoute.GET(jsonRequest("http://localhost/api/key"));
+    // Empty header = opt out of the builder's default READ_KEY.
+    const res = await keyRoute.GET(jsonRequest("http://localhost/api/key", undefined, { "x-contribution-key": "" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ has_key: false, review_threshold: 3 });
   });
