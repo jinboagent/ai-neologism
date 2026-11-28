@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { LOCALE_COOKIE, UI_LOCALES } from "@/lib/i18n/core";
+import wordIndex from "./generated/word-index.json";
 
 /**
  * One-time Accept-Language redirect (multilingual phase 2): a first-time
@@ -7,6 +8,11 @@ import { LOCALE_COOKIE, UI_LOCALES } from "@/lib/i18n/core";
  * in that locale gets redirected once; the choice cookie is set so the
  * redirect never fights a manual language pick. Googlebot sends no
  * Accept-Language header, so crawlers always see the unprefixed originals.
+ *
+ * Cross-language word URLs (e.g. /de/words/<en-slug>, a family link pasted
+ * with the wrong prefix) are redirected here too, using the build-generated
+ * slug map — the word PAGE must not call redirect() because that would flip
+ * it back to dynamic rendering in Next 16 (see the 2026-11 Vercel outage).
  */
 
 // Paths that exist under /{locale} — everything else (action pages, owner
@@ -22,9 +28,35 @@ const LOCALIZED_PATHS: RegExp[] = [
 ];
 
 const LOCALE_PREFIX = /^\/(de|es|fr)(?=\/|$)/;
+const WORD_PATH = /^\/(de|es|fr)?\/?words\/([^/]+)$/;
+
+type WordIndex = Record<string, { lang: string; fam: Record<string, string> }>;
+
+function crossLangRedirect(req: NextRequest): NextResponse | null {
+  const { pathname } = req.nextUrl;
+  const m = WORD_PATH.exec(pathname);
+  if (!m) return null;
+  const locale = m[1] ?? "en";
+  const slug = m[2];
+  const e = (wordIndex as WordIndex)[slug];
+  if (!e) return null; // unknown slug — let the page render its own 404
+  // The URL's language segment must match the word's own language; anything
+  // else (a family link pasted with the wrong prefix, a stale bookmark) is
+  // redirected to the word in this language, falling back to the word's own
+  // language when the URL language has no published sibling.
+  if (e.lang === locale) return null;
+  const targetLang = e.fam[locale] ? locale : e.lang;
+  const target = e.fam[targetLang];
+  if (!target) return null;
+  const url = req.nextUrl.clone();
+  url.pathname = targetLang === "en" ? `/words/${target}` : `/${targetLang}/words/${target}`;
+  return NextResponse.redirect(url);
+}
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const localizer = req.method === "GET" || req.method === "HEAD" ? crossLangRedirect(req) : null;
+  if (localizer) return localizer;
 
   // Already localized (or a /en/... request) — pass through untouched.
   if (LOCALE_PREFIX.test(pathname) || /^\/en(\/|$)/.test(pathname)) {

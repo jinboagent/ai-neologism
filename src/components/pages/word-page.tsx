@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Badge, StatusPill } from "@/components/badge";
 import { IconExternal } from "@/components/icons";
@@ -57,15 +57,13 @@ export async function WordPage({ slug, locale, cookieKey }: { slug: string; loca
   // still never RENDER another language's entry under its URL — but a dead 404
   // is worse than a hop: redirect to the same concept in this language, falling
   // back to the EN canonical, and 404 only when no published sibling exists.
+  // Cross-language slugs are handled by middleware (a build-generated slug map,
+  // see scripts/gen-word-index.mjs) — calling redirect() HERE would flip the
+  // whole page back to dynamic rendering in Next 16 (it reads request context),
+  // which is exactly what took the site down in the 2026-11 Vercel quota
+  // outage. Anything middleware could not resolve simply 404s.
   const anyLang = await getWord(slug, cookieKey ? hashKey(cookieKey) : null);
-  if (anyLang && anyLang.language !== locale) {
-    const family = anyLang.status === "published" ? await getWordFamily(anyLang.concept_id) : [];
-    const inLocale = family.find((f) => f.language === locale);
-    if (inLocale) redirect(localePath(locale, `/words/${inLocale.slug}`));
-    const en = family.find((f) => f.language === "en");
-    if (en) redirect(localePath("en", `/words/${en.slug}`));
-    notFound();
-  }
+  if (anyLang && anyLang.language !== locale) notFound();
   const word = await getWord(slug, cookieKey ? hashKey(cookieKey) : null, locale);
   if (!word) notFound();
 

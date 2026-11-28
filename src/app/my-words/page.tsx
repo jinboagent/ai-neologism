@@ -69,9 +69,16 @@ export default function MyWordsPage() {
           {words.map((w) => (
             <li key={w.slug} className="rounded-xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-3">
-                <Link href={`/words/${w.slug}`} className="word-title text-lg font-bold text-primary hover:underline">
-                  {w.word}
-                </Link>
+                {/* Published words link to the public page; unpublished ones
+                    would 404 there now that word pages render published-only
+                    (ISR), so the card itself carries the status instead. */}
+                {w.status === "published" ? (
+                  <Link href={`/words/${w.slug}`} className="word-title text-lg font-bold text-primary hover:underline">
+                    {w.word}
+                  </Link>
+                ) : (
+                  <span className="word-title text-lg font-bold">{w.word}</span>
+                )}
                 <StatusPill status={w.status} />
                 {w.status === "published" && <Badge kind={w.badge} />}
               </div>

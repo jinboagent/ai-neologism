@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "seed": "node scripts/seed.mjs",
-    "build": "next build",
+    "build": "node scripts/gen-word-index.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

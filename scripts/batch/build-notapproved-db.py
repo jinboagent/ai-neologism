@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the standalone local archive of non-approved batch-4/5 words.
+"""Build the standalone local archive of non-approved batch-4..7 words.
 
 Output: data/ai-neologism-notapproved.db (plain SQLite, separate from the wiki DB).
 
@@ -35,6 +35,14 @@ REVMAP = {
     "review-batch-4-09-claude.md": "batch-4-09-daily-100.md",
     "review-batch-4-10-claude.md": "batch-4-10-daily-100.md",
     "review-batch-5-01-claude.md": "batch-5-01-night-100.md",
+    "review-batch-6-01-claude.md": "batch-6-01-weather-100.md",
+    "review-batch-6-02-claude.md": "batch-6-02-pets-100.md",
+    "review-batch-6-03-claude.md": "batch-6-03-transport-100.md",
+    "review-batch-7-01-claude.md": "batch-7-01-screens-100.md",
+    "review-batch-7-02-claude.md": "batch-7-02-money-100.md",
+    "review-batch-7-03-claude.md": "batch-7-03-health-100.md",
+    "review-batch-7-04-claude.md": "batch-7-04-school-100.md",
+    "review-batch-7-05-claude.md": "batch-7-05-music-100.md",
 }
 DE_FILTERED = {"batch-4-04", "batch-4-05", "batch-4-06", "batch-4-07", "batch-4-08", "batch-4-09"}
 
@@ -122,13 +130,20 @@ def main():
         batch = rev.replace("review-", "").replace("-claude.md", "")
         ents = parse_source(WS / src)
         review_rows = {n: (w, v, f, nv, reason) for (n, w, v, f, nv, reason) in parse_review_table(WS / rev)}
+        # batch-4/5 have a pre-extracted verdicts json; later batches parse the
+        # review markdown directly (the markdown table is the final word after
+        # coordinator addenda are folded in).
+        verdict_rows = verdicts.get(rev, {}).get("rows") or [
+            {"n": n, "word": w, "verdict": v, "funny": f, "novelty": nv}
+            for n, (w, v, f, nv, reason) in sorted(review_rows.items())
+        ]
         de_file = WS / (f"{batch}-daily-de.md")
         de_table = parse_bilingual(de_file) if de_file.exists() else {}
         de_review_path = Path(str(WS / rev).replace("-claude.md", "-de-claude.md"))
         de_review = parse_review_table(de_review_path) if de_review_path.exists() else []
         de_verdict_by_num = {n: (w, v, reason) for (n, w, v, f, nv, reason) in de_review}
 
-        for r in verdicts[rev]["rows"]:
+        for r in verdict_rows:
             n = r["n"]
             if r["verdict"] == "APPROVE":
                 continue  # approved words live in the wiki DB
@@ -150,7 +165,7 @@ def main():
         for (dn, dw, dv, df, dnv, dreason) in de_review:
             if dv not in ("REVISE", "REJECT"):
                 continue
-            en_row = next((x for x in verdicts[rev]["rows"] if x["n"] == dn), None)
+            en_row = next((x for x in verdict_rows if x["n"] == dn), None)
             if not en_row or en_row["verdict"] != "APPROVE":
                 continue  # EN-REJECT rows are in not_approved_en already
             de = de_bilingual.get(dn)
@@ -162,11 +177,13 @@ def main():
             counts["de_held"] += 1
 
     cur.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", [
-        ("built", "2026-11-14"),
-        ("scope", "batch-4 01-10 + batch-5-01 (English novelty review; German in-language review for 04-09)"),
+        ("built", "2026-11-22"),
+        ("scope", "batch-4 01-10 + batch-5-01 (EN novelty review; DE in-language review for 04-09) "
+                  "+ batch-6 01-03 (weather/pets/transport) + batch-7 01-05 (game-feeder)"),
         ("en_rows", str(counts["en"])), ("rejects", str(counts["rejects"])), ("revises", str(counts["revises"])),
         ("german_held_back", str(counts["de_held"])),
-        ("note", "verdicts from wordstoreview/review-*.md via review-verdicts.json; CHECKs resolved 2026-11-14"),
+        ("note", "verdicts from wordstoreview/review-*.md (review-verdicts.json for batch-4/5, "
+                 "direct table parse for batch-6/7); CHECKs resolved 2026-11-14"),
     ])
     con.commit()
 
