@@ -28,10 +28,36 @@ async function openDb() {
   return createClient({ url: "file:" + path.join(ROOT, "data", "ai-neologism.db").replace(/\\/g, "/") });
 }
 
-const db = await openDb();
-const rows = (await db.execute(
-  "SELECT slug, language, concept_id FROM words WHERE status = 'published' AND concept_id IS NOT NULL"
-)).rows;
+const OUT = path.join(ROOT, "src", "generated", "word-index.json");
+
+// A committed word-index.json is the safety net: the Vercel build environment
+// may not expose TURSO_AUTH_TOKEN to the build step (our 2026-11-28 deploy
+// failed on a 401), and a fresh checkout has no local file DB. In those cases
+// the last committed map ships as-is; regenerating requires a DB (Vercel with
+// the token visible to builds, or any local checkout with data/ present).
+function keepCommitted(reason) {
+  if (fs.existsSync(OUT)) {
+    console.log(`word-index: ${reason} — keeping the committed map (${Math.round(fs.statSync(OUT).size / 1024)} KB)`);
+    process.exit(0);
+  }
+  console.error(`word-index: ${reason} and no committed map at src/generated/word-index.json — cannot continue`);
+  process.exit(1);
+}
+
+let db;
+try {
+  db = await openDb();
+} catch (e) {
+  keepCommitted(`DB connection failed (${e.message.split(chr(10))[0]})`);
+}
+let rows;
+try {
+  rows = (await db.execute(
+    "SELECT slug, language, concept_id FROM words WHERE status = 'published' AND concept_id IS NOT NULL"
+  )).rows;
+} catch (e) {
+  keepCommitted(`DB query failed (${e.message.split(chr(10))[0]})`);
+}
 
 const langs = ["en", "de", "es", "fr"];
 const byConcept = new Map();
@@ -53,8 +79,7 @@ for (const fam of byConcept.values()) {
   }
 }
 
-const out = path.join(ROOT, "src", "generated", "word-index.json");
-fs.mkdirSync(path.dirname(out), { recursive: true });
-fs.writeFileSync(out, JSON.stringify(index));
-console.log(`word-index: ${Object.keys(index).length} slugs -> ${out} (${Math.round(fs.statSync(out).size / 1024)} KB)`);
+fs.mkdirSync(path.dirname(OUT), { recursive: true });
+fs.writeFileSync(OUT, JSON.stringify(index));
+console.log(`word-index: ${Object.keys(index).length} slugs -> ${OUT} (${Math.round(fs.statSync(OUT).size / 1024)} KB)`);
 await db.close();
