@@ -48,7 +48,8 @@ let db;
 try {
   db = await openDb();
 } catch (e) {
-  keepCommitted(`DB connection failed (${e.message.split(chr(10))[0]})`);
+  keepCommitted(`DB connection failed (${e.message.split(
+)[0]})`);
 }
 let rows;
 try {
@@ -56,7 +57,8 @@ try {
     "SELECT slug, language, concept_id FROM words WHERE status = 'published' AND concept_id IS NOT NULL"
   )).rows;
 } catch (e) {
-  keepCommitted(`DB query failed (${e.message.split(chr(10))[0]})`);
+  keepCommitted(`DB query failed (${e.message.split(
+)[0]})`);
 }
 
 const langs = ["en", "de", "es", "fr"];
